@@ -30,3 +30,20 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+.env.*
+!.env.example
+.dart_tool/
+.flutter-plugins-dependencies
+build/
+**/ephemeral/
+**/local.properties
+**/.gradle/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.jks
+*.keystore
+__pycache__/
+**/key.properties
+**/.idea/
+*.iml
