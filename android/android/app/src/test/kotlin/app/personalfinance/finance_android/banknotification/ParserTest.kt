@@ -7,6 +7,21 @@ import java.time.ZoneId
 import java.time.Instant
 
 class ParserTest {
+    @Test fun techcombankUsesConservativeCommonFields() {
+        assertTrue(BankSourceRegistry.sources.any { it.code == "techcombank" && "vn.com.techcombank.bb.app" in it.packages })
+        fun t(text: String) = ParserRouter.parse("techcombank", "vn.com.techcombank.bb.app", text, 1790000000000)
+        val p = t("GD: +5,000VND|SD: 100,000VND")
+        assertEquals("techcombank-generic-v1", p.parserId)
+        assertEquals(5000L, p.amountMinor)
+        assertEquals(100000L, p.balanceMinor)
+        assertEquals(Direction.income, p.direction)
+        assertTrue(p.canCreateDraft)
+        assertEquals(1999L, t("Số tiền GD: -19.99 USD").amountMinor)
+        assertFalse(t("GD: -5,000VND KHÔNG THÀNH CÔNG").canCreateDraft)
+        assertFalse(t("GD: -5,000VND KHONG THANH CONG").canCreateDraft)
+        assertFalse(t("Số dư: 100,000VND").canCreateDraft)
+    }
+
     private val zone = ZoneId.of("Asia/Ho_Chi_Minh")
     private fun parse(text: String) = ParserRouter.parse("mbbank", "com.mbmobile", text, 1790000000000, zone)
     @Test fun balanceIsSeparateExactAndOnlyFromSuccessfulNotifications() {

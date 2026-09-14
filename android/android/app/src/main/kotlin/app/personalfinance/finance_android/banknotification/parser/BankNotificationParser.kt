@@ -82,11 +82,12 @@ open class GenericVietnamBankParser(private val id: String = "generic-vietnam-v1
 class MbBankParser : GenericVietnamBankParser("mbbank-v1")
 // Deliberately use proven common fields until real samples justify bank-specific formats.
 class VietinBankParser : GenericVietnamBankParser("vietinbank-generic-v1")
+class TechcombankParser : GenericVietnamBankParser("techcombank-generic-v1")
 class BidvParser : GenericVietnamBankParser("bidv-generic-v1")
 
 object ParserRouter {
     fun parse(bank: String, source: String, text: String, postedAt: Long, zone: ZoneId = ZoneId.systemDefault()): ParsedBankTransaction {
-        val parser = when (bank) { "mbbank" -> MbBankParser(); "vietinbank" -> VietinBankParser(); "bidv" -> BidvParser(); else -> GenericVietnamBankParser() }
+        val parser = when (bank) { "techcombank" -> TechcombankParser(); "mbbank" -> MbBankParser(); "vietinbank" -> VietinBankParser(); "bidv" -> BidvParser(); else -> GenericVietnamBankParser() }
         return runCatching { parser.parse(bank, source, text, postedAt, zone) }.getOrElse {
             ParsedBankTransaction(bank, source, occurredAtMillis = postedAt, parserId = "unsupported")
         }

@@ -27,6 +27,7 @@ class BankDraft {
     'mbbank' => 'MB Bank',
     'vietinbank' => 'VietinBank iPay',
     'bidv' => 'BIDV',
+    'techcombank' => 'Techcombank',
     _ => bankCode,
   };
   String get transactionId =>

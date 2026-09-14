@@ -6,6 +6,7 @@ data class BankSource(val code: String, val name: String, val packages: Set<Stri
 object BankSourceRegistry {
     // Verified via adb pm list packages --user 0 on the developer's Samsung, 2026-09-14.
     val sources = listOf(
+        BankSource("techcombank", "Techcombank", setOf("vn.com.techcombank.bb.app"), setOf("TECHCOMBANK")),
         BankSource("mbbank", "MB Bank", setOf("com.mbmobile"), setOf("MBBANK", "MB BANK")),
         BankSource("vietinbank", "VietinBank iPay", setOf("com.vietinbank.ipay"), setOf("VIETINBANK IPAY")),
         BankSource("bidv", "BIDV", setOf("com.vnpay.bidv"), setOf("BIDV SMARTBANKING", "BIDV")),

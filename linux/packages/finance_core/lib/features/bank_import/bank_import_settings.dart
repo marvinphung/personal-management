@@ -199,7 +199,7 @@ class _BankParserScreenState extends ConsumerState<BankParserScreen> {
             DropdownButton<String>(
               value: bank,
               items: [
-                for (final code in ['mbbank', 'vietinbank', 'bidv', 'generic'])
+                for (final code in ['mbbank', 'vietinbank', 'bidv', 'techcombank', 'generic'])
                   DropdownMenuItem(value: code, child: Text(code)),
               ],
               onChanged: (v) => setState(() => bank = v!),

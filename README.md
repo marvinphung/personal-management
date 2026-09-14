@@ -1,10 +1,85 @@
-# Personal Finance — Ứng dụng quản lý tài chính cá nhân
+# Finance Inbox — Ứng dụng quản lý tài chính cá nhân
 
 Ứng dụng Flutter dành cho **điện thoại Android** và **máy tính Linux**, ưu tiên nhập khoản chi nhanh, sử dụng ngoại tuyến và theo dõi công nợ. Hai ứng dụng dùng chung dữ liệu trên Supabase và đăng nhập bằng cùng một tài khoản.
 
 Tài liệu này hướng dẫn cài môi trường phát triển trên **Ubuntu**, chạy app trên điện thoại Android hoặc máy ảo, và chạy ứng dụng desktop Ubuntu. Giao diện hỗ trợ **English** và **Tiếng Việt**.
 
 > Chạy các lệnh trong tài liệu tại **thư mục gốc của repository**, nơi chứa `README.md`, `android/`, `linux/` và `.env`, trừ khi có ghi chú khác. Không cần khởi động backend hay cài PostgreSQL trên máy để chạy app.
+
+## Bắt đầu nhanh cho người nhận repository
+
+Bạn cần **máy tính** để tải mã nguồn và build; chỉ tải repository về điện thoại sẽ không chạy được app.
+Hướng dẫn này dùng Ubuntu 24.04/Zorin 18 x86_64. Android cần điện thoại bật USB debugging
+hoặc emulator; các bước cài Flutter, JDK và Android SDK nằm ở mục 1 và mục 4 bên dưới.
+
+### Lần đầu lấy mã nguồn
+
+```bash
+git clone https://github.com/marvinphung/personal-management.git
+cd personal-management
+test -f .env || cp .env.example .env
+```
+
+Repository riêng tư yêu cầu chủ repo cấp quyền GitHub trước khi clone.
+Mở `.env` và điền **chỉ hai biến client** `SUPABASE_URL`, `SUPABASE_ANON_KEY`:
+
+- Dùng chung Supabase với chủ repo: xin hai giá trị công khai này từ chủ repo.
+  Đăng ký tài khoản app riêng; RLS tách dữ liệu giữa các người dùng. Không dùng chung mật khẩu đăng nhập.
+  Người dùng thông thường **không cần chạy migration**, không cần mật khẩu PostgreSQL.
+- Dùng Supabase riêng: tạo project, lấy hai giá trị ở mục 2 và tự chạy các migration ở mục 3.
+  Không chạy migration lên database của người khác nếu chưa được giao quản trị.
+
+`.env`, khóa ký, APK và `.deb` không nằm trong Git. Không gửi nguyên `.env` của chủ repo
+vì file đó có thể chứa thông tin quản trị database. Chỉ có mã nguồn và `.env.example` là chưa đủ để đăng nhập.
+
+### Chạy Android qua USB
+
+Sau khi cài công cụ theo mục 1 và 4, cắm cáp dữ liệu, mở khóa điện thoại và chấp nhận USB debugging:
+
+```bash
+flutter doctor -v
+flutter devices
+(cd android && flutter pub get)
+python3 linux/tool/flutter_client.py android run -d ANDROID_DEVICE_ID
+```
+
+Thay `ANDROID_DEVICE_ID` bằng ID của **điện thoại bạn**, lấy từ `flutter devices`.
+Lệnh sẽ build và cài bản debug qua USB. Không cần chép APK vào trình quản lý file.
+Không bảo đảm việc cài APK bằng trình quản lý file được Play Protect cho phép vì app đọc thông báo ngân hàng.
+Không yêu cầu tắt Play Protect.
+
+Đăng ký/đăng nhập tài khoản riêng, chọn ngôn ngữ. Để tự nhập thông báo ngân hàng:
+vào **Cài đặt → Nhập thông báo ngân hàng**, bật thu thập, cấp **Notification Access**
+trong Android và chọn tài khoản mặc định cho ngân hàng. Chỉ nhận thông báo mới sau khi bật quyền;
+không khôi phục lịch sử thông báo cũ. Nếu Android chặn cấp quyền, đọc thông báo hệ thống
+và hướng dẫn quyền truy cập của thiết bị; ứng dụng không tự cấp quyền thay người dùng.
+
+### Chạy trên Ubuntu
+
+Sau khi cài thư viện ở mục 5:
+
+```bash
+(cd linux && flutter pub get)
+python3 linux/tool/flutter_client.py linux run -d linux
+```
+
+Đăng nhập cùng tài khoản app trên Android và Ubuntu nếu muốn đồng bộ dữ liệu của chính bạn.
+
+### Cập nhật khi repo có phiên bản mới
+
+Tại thư mục gốc dự án, khi không có thay đổi mã nguồn cục bộ cần xử lý:
+
+```bash
+git pull --ff-only
+(cd android && flutter pub get)
+(cd linux && flutter pub get)
+```
+
+Sau đó chạy lại lệnh cho nền tảng cần dùng. Nếu Git báo xung đột hoặc nhánh đã phân kỳ,
+kiểm tra thay đổi của bạn trước; không dùng reset để xóa chúng. `.env` đang có được giữ nguyên.
+Chủ Supabase áp dụng migration mới khi cần. Giữ cùng máy/khóa ký cho các lần cập nhật Android;
+đổi từ debug sang release hoặc đổi máy build có thể gây xung đột chữ ký. Đồng bộ dữ liệu
+và xử lý hết inbox cục bộ trước khi cân nhắc gỡ app.
 
 ## Mục lục
 
@@ -232,7 +307,7 @@ APK được tạo tại:
 android/build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-Có thể chép APK sang điện thoại để cài và cho phép cài ứng dụng từ nguồn đang sử dụng khi Android yêu cầu. Nếu đã có `adb` và chỉ kết nối một thiết bị, cài bằng:
+Play Protect có thể chặn khi mở APK từ trình quản lý file do quyền đọc thông báo. Để thử trên thiết bị phát triển đã cho phép USB debugging, nếu đã có `adb` và chỉ kết nối một thiết bị, cài bằng:
 
 ```bash
 adb install -r android/build/app/outputs/flutter-apk/app-debug.apk
@@ -544,6 +619,7 @@ của chính bạn, có thể đổi một draft thành **Chuyển khoản** và
 | MB Bank | `com.mbmobile` | Kiểm thử theo các mẫu tài khoản, Visa/Mastercard được cung cấp |
 | VietinBank iPay | `com.vietinbank.ipay` | Bộ phân tích trường chung; cần thêm mẫu thật để mở rộng |
 | BIDV | `com.vnpay.bidv` | Bộ phân tích trường chung; cần thêm mẫu thật để mở rộng |
+| Techcombank | `vn.com.techcombank.bb.app` | Bộ phân tích trường chung; cần thêm mẫu thật để mở rộng |
 
 Package được kiểm tra ngày 14/09/2026. `BankSourceRegistry` là nơi bổ sung package
 cho các phiên bản khác; bridge cũng có cấu hình package bổ sung theo ngân hàng.
@@ -682,7 +758,7 @@ gói Linux có icon và shortcut trong menu ứng dụng.
 ### Cài Android bằng APK
 
 File: `android/build/installers/finance-inbox-1.0.0.apk`.
-Chép file sang điện thoại, mở file và cho phép ứng dụng quản lý file cài ứng dụng khi Android hỏi.
+Cài qua ADB theo hướng dẫn cuối tài liệu. Mở file trực tiếp trên điện thoại có thể bị Play Protect chặn; không bảo đảm APK tải ngoài cài được trên mọi thiết bị.
 Đây là APK release ký bằng khóa riêng, không phải bản debug.
 Nếu đang có bản debug, Android không cho cài đè vì khác chữ ký: hãy đồng bộ dữ liệu,
 xử lý hết bản nháp thông báo ngân hàng trước khi gỡ bản debug và cài release.
@@ -720,3 +796,28 @@ python3 linux/tool/package_deb.py
 ```
 
 Bộ cài nằm trong các thư mục `build/installers/`, không commit vào Git.
+
+### Techcombank và cài APK khi Play Protect chặn
+
+Techcombank đã được thêm vào **Cài đặt → Nhập thông báo ngân hàng**, gồm bật/tắt nguồn
+và chọn tài khoản mặc định. Package `vn.com.techcombank.bb.app` được xác minh bằng ADB
+trên Samsung ngày 14/09/2026. Hiện dùng parser chung với các trường rõ ràng `GD:`,
+`Số tiền GD:`, `SD:`, `Số dư:`, hỗ trợ VND/USD và bỏ qua giao dịch thất bại.
+Các test là mẫu tổng hợp kiểm tra quy tắc chung, chưa phải mẫu thông báo Techcombank thực tế.
+Định dạng không nhận diện được sẽ bị bỏ qua; cần mẫu thực tế để mở rộng an toàn.
+
+Play Protect có thể chặn APK cài từ trình duyệt/quản lý file vì ứng dụng sử dụng
+Notification Listener. Chữ ký hợp lệ không bảo đảm Google cho phép cách cài này.
+Xem [giải thích của Google](https://developers.google.com/android/play-protect/warning-dev-guidance).
+Không cần tắt Play Protect để thử cài qua USB trên thiết bị phát triển đã cho phép USB debugging:
+
+```bash
+adb devices
+adb -s ANDROID_DEVICE_ID install -r android/build/installers/finance-inbox-1.0.0.apk
+```
+
+Thay serial nếu dùng điện thoại khác. APK release đã cài qua ADB và khởi động thành công
+trên Samsung SM A546E; cài trực tiếp từ quản lý file vẫn có thể bị Play Protect chặn.
+Không gỡ bản release khi cập nhật: `install -r` với cùng khóa giữ dữ liệu hiện có.
+Để phân phối rộng rãi, cần kênh phân phối phù hợp và xử lý đánh giá/kháng nghị Play Protect
+với Google; không đổi tên quyền hoặc che giấu Notification Listener để né kiểm tra.
