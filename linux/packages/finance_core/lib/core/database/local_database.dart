@@ -89,13 +89,13 @@ class LocalDatabase extends GeneratedDatabase {
 
   Future<Map<String, int>> balances() async {
     final rows = await customSelect("""
-SELECT a.id, CAST(json_extract(a.payload,'\$.opening_balance') AS INTEGER)+COALESCE(SUM(
+SELECT a.id, CAST(COALESCE(json_extract(a.payload,'\$.bank_balance'),json_extract(a.payload,'\$.opening_balance')) AS INTEGER)+COALESCE(SUM(
  CASE WHEN json_extract(t.payload,'\$.type')='transfer' THEN
   CASE WHEN json_extract(t.payload,'\$.to_account_id')=a.id THEN CAST(json_extract(t.payload,'\$.amount') AS INTEGER) ELSE 0 END -
   CASE WHEN json_extract(t.payload,'\$.from_account_id')=a.id THEN CAST(json_extract(t.payload,'\$.amount') AS INTEGER) ELSE 0 END
  ELSE CASE WHEN json_extract(t.payload,'\$.account_id')=a.id THEN
   CAST(json_extract(t.payload,'\$.amount') AS INTEGER)*CASE WHEN json_extract(t.payload,'\$.type')='income' THEN 1 ELSE -1 END ELSE 0 END END),0) AS balance
-FROM records a LEFT JOIN records t ON t.entity='transactions' AND json_extract(t.payload,'\$.deleted_at') IS NULL
+FROM records a LEFT JOIN records t ON t.entity='transactions' AND json_extract(t.payload,'\$.deleted_at') IS NULL AND julianday(json_extract(t.payload,'\$.occurred_at')) <= julianday('now') AND (json_extract(a.payload,'\$.bank_balance_at') IS NULL OR julianday(json_extract(t.payload,'\$.occurred_at')) > julianday(json_extract(a.payload,'\$.bank_balance_at')))
 WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GROUP BY a.id
 """).get();
     return {
@@ -103,11 +103,12 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
     };
   }
 
-  Future<void> enqueue(String id, List<Record> rows) async {
+  Future<void> enqueue(String id, List<Record> rows, {String? receipt}) async {
     await transaction(() async {
       for (final row in rows) {
         await put(row);
       }
+      if (receipt != null) await setMetadata(receipt, id);
       await customStatement('INSERT INTO outbox(id,payload) VALUES(?,?)', [
         id,
         jsonEncode(rows.map((r) => r.change).toList()),

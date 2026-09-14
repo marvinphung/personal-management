@@ -377,6 +377,10 @@ class TransactionDetail extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               for (final pair in {
+                if (record.data['installment_group'] != null)
+                  context.tr(
+                    'Installments',
+                  ): '${record.text('installment_number')}/${record.text('installment_count')}',
                 context.tr('Type'): context.tr(record.text('type')),
                 context.tr('Purpose'): context.tr(record.text('purpose')),
                 context.tr('Date'): DateFormat.yMMMd(

@@ -1,3 +1,5 @@
+import 'package:go_router/go_router.dart';
+import '../features/bank_import/bank_draft_repository.dart';
 import '../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -97,6 +99,13 @@ class SettingsScreen extends ConsumerWidget {
       ),
       const Divider(),
       const SyncStatus(),
+      if (BankDraftRepository.supported)
+        ListTile(
+          leading: const Icon(Icons.notifications_active_outlined),
+          title: Text(context.tr('Bank Notification Import')),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.go('/settings/bank-import'),
+        ),
       const SizedBox(height: 20),
       OutlinedButton.icon(
         onPressed: () async {

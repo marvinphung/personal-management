@@ -85,6 +85,46 @@ void main() {
     );
     expect(await workspace.db.pending(), isNotEmpty);
   });
+  testWidgets(
+    'installment form asks monthly payment and creates six dated expenses',
+    (tester) async {
+      final repo = workspace.repository;
+      await repo.save(repo.create(Entity.accounts, {'name': 'Cash'}));
+      await tester.pumpWidget(
+        wrap(
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showTransactionForm(context),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Installments'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Monthly payment'), findsOneWidget);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Monthly payment'),
+        '100k',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      final rows = await workspace.db.list(Entity.transactions);
+      expect(rows, hasLength(6));
+      expect(
+        rows.every(
+          (r) => r.money('amount') == 100000 && r.date('occurred_at').day == 24,
+        ),
+        true,
+      );
+      expect(
+        rows.map((r) => r.text('installment_group')).toSet(),
+        hasLength(1),
+      );
+    },
+  );
   testWidgets('editing retains tags that finish loading after accounts', (
     tester,
   ) async {

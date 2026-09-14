@@ -1,9 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="Personal Finance" android:allowBackup="false"
+        android:label="Finance Inbox" android:allowBackup="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <service android:name=".banknotification.BankNotificationListenerService"
+            android:label="Personal Finance — Bank Import"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter>
+        </service>
+        <receiver android:name=".banknotification.BankInboxWidget" android:exported="false" android:label="Finance Inbox">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/bank_inbox_widget"/>
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:exported="true"

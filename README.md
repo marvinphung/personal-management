@@ -511,3 +511,212 @@ Giới hạn hiện tại:
 - Chưa kiểm chứng đầy đủ từng môi trường X11/Wayland hoặc mọi phiên bản Ubuntu. Dữ liệu quy mô rất lớn sẽ cần tối ưu chiến lược tải và tổng hợp.
 
 Xem [checklist triển khai](linux/docs/implementation.md) và [kịch bản nghiệm thu](linux/docs/acceptance.md) để biết thêm chi tiết kỹ thuật.
+
+## Automatic Bank Notification Import — Nhập thông báo ngân hàng (Android)
+
+Tính năng này chỉ có trên **Android**. Linux nhận giao dịch đã xác nhận qua hệ
+thống đồng bộ hiện có; Linux không nhận inbox hoặc nội dung thông báo của điện thoại.
+
+### Bật và sử dụng
+
+1. Cập nhật/cài bản Android mới rồi đăng nhập.
+2. Mở **Cài đặt → Nhập thông báo ngân hàng** (*Settings → Bank Notification Import*).
+3. Bật **Tự động phát hiện giao dịch**.
+4. Chọn **Mở cài đặt truy cập thông báo** và tự cấp quyền cho
+   **Personal Finance — Bank Import** trong màn hình hệ thống Android.
+   Đây là quyền *Notification Access*, khác với quyền cho phép app gửi thông báo.
+5. Bật các ngân hàng muốn nhập. Có thể chọn tài khoản tài chính mặc định cho từng ngân hàng.
+6. Khi thông báo hợp lệ đến, mở biểu tượng inbox ở thanh trên hoặc thêm widget
+   **Finance Inbox** vào màn hình chính Android: nhấn giữ màn hình chính → Widget
+   → Personal Finance → Finance Inbox (2×2).
+7. Chạm widget để vào thẳng **Giao dịch chờ duyệt**. Chọn **Duyệt và xác nhận**,
+   sửa mô tả/category/tags/tài khoản nếu cần rồi **Lưu**. Có thể sửa cả số tiền,
+   tiền tệ, loại giao dịch và ngày giờ. Chọn **Bỏ qua** nếu không muốn nhập.
+
+Không tự động xác nhận bất kỳ giao dịch nào. Khi chuyển tiền giữa các tài khoản
+của chính bạn, có thể đổi một draft thành **Chuyển khoản** và bỏ qua draft đối ứng.
+Ứng dụng không tự ghép hai thông báo thành chuyển khoản.
+
+### Ngân hàng và định dạng
+
+| Ngân hàng | Package đã kiểm tra trên Samsung qua ADB | Mức hỗ trợ |
+|---|---|---|
+| MB Bank | `com.mbmobile` | Kiểm thử theo các mẫu tài khoản, Visa/Mastercard được cung cấp |
+| VietinBank iPay | `com.vietinbank.ipay` | Bộ phân tích trường chung; cần thêm mẫu thật để mở rộng |
+| BIDV | `com.vnpay.bidv` | Bộ phân tích trường chung; cần thêm mẫu thật để mở rộng |
+
+Package được kiểm tra ngày 14/09/2026. `BankSourceRegistry` là nơi bổ sung package
+cho các phiên bản khác; bridge cũng có cấu hình package bổ sung theo ngân hàng.
+App không tin chỉ dựa vào tên hiển thị vì ứng dụng khác có thể dùng tên giống ngân hàng.
+
+- Ưu tiên **`Số tiền GD:` / `So tien GD:` / `GD:`**. Không lấy **`SD:` / `Số dư:` /
+  `So du:` / `Balance:`** làm số tiền giao dịch.
+- **VND**: `+40,000VND`, `-52,550VND`, `-527.778 VND`; lưu số nguyên, không có xu.
+- **USD**: `-19.99 USD`, `+1,234.56USD`, `1.234,56 USD`; `19.99 USD` lưu `1999`
+  minor units. Không dùng `Double` cho tiền, không tự đổi USD sang VND.
+  USD có dấu phân cách nhưng thiếu phần thập phân rõ ràng bị loại để tránh đoán sai.
+- Dấu `+` là thu, `-` là chi; số tiền lưu luôn dương. Thiếu dấu thì yêu cầu chọn loại.
+- Thời gian: `dd/MM/yy HH:mm` và `yyyy-MM-dd HH:mm:ss` (có thể nằm trong `[]`).
+  Diễn giải theo múi giờ thiết bị rồi lưu UTC như giao dịch thường. Nếu không đọc
+  được ngày giờ, dùng thời điểm nhận thông báo và đánh dấu rõ trong màn hình duyệt.
+- **`KHÔNG THÀNH CÔNG`, `KHONG THANH CONG`, `THẤT BẠI`, `FAILED`, `DECLINED`,
+  `TỪ CHỐI`** được kiểm tra trước thành công: không tạo draft, không tăng widget.
+  OTP, yêu cầu/chờ xử lý và định dạng mơ hồ cũng bị loại.
+- Có nhiều số tiền giao dịch không phân biệt được thì bỏ qua thay vì chọn đại.
+  Thông báo vượt giới hạn kích thước bị loại toàn bộ để không cắt mất câu báo thất bại.
+
+Tài khoản được chọn phải có cùng tiền tệ với giao dịch; form hiển thị tiền tệ tài
+khoản và chặn lưu khi lệch. Nếu sửa tiền tệ thì phải tự kiểm tra/sửa số tiền;
+ứng dụng không tạo tỷ giá.
+
+### Kiến trúc, quyền riêng tư và chống trùng
+
+```mermaid
+flowchart TD
+    B[Ứng dụng ngân hàng] --> N[Android Notification]
+    N --> L[Kotlin NotificationListenerService]
+    L --> F[Lọc package đã cấu hình]
+    F --> P[Regex và chuẩn hóa cục bộ]
+    P -->|Thất bại / OTP / không rõ| X[Bỏ qua]
+    P -->|Giao dịch hợp lệ| D[(Room: inbox Android)]
+    D --> W[Widget Finance Inbox]
+    W --> R[Flutter: Giao dịch chờ duyệt]
+    D --> R
+    R -->|Người dùng xác nhận| T[FinanceRepository hiện có]
+    T --> S[(Drift / SQLite + outbox)]
+    S --> C[Supabase qua sync hiện có]
+```
+
+- **Không AI, không API phân tích, không backend mới.** Service/parser/Room/widget
+  không gọi mạng và không phụ thuộc Dart isolate đang chạy.
+- Lọc package **trước khi đọc extras**. Không lưu lịch sử thông báo điện thoại,
+  email, chat hoặc OTP. Không đọc Samsung Notification History, không có AccessibilityService.
+- **Không lưu raw notification**, kể cả trong draft: chỉ giữ gợi ý đã trích xuất
+  (số tiền, mô tả, thời gian, ngân hàng và phần cuối tài khoản/thẻ khi nhận diện được).
+  Những gợi ý này vẫn là dữ liệu nhạy cảm trên thiết bị; không log nội dung hay số tiền.
+- Room riêng `bank_inbox.db`, schema phiên bản 1, bảng `bank_drafts`:
+  `id`, `owner`, `fingerprint`, `payload` JSON của model đã parse, `status`,
+  `createdAtMillis`, `updatedAtMillis`. UNIQUE `(owner, fingerprint)`; index
+  `(owner, status)` cho đếm/lấy pending. Schema xuất tại `android/android/app/schemas/`.
+  Các phiên bản tương lai phải thêm migration Room, không dùng destructive fallback.
+- Chỉ draft `pending` có payload. Xác nhận/bỏ qua xóa payload và giữ tombstone
+  fingerprint để callback cũ không tạo lại draft. Widget cập nhật sau mỗi thay đổi.
+- Inbox và cấu hình gắn với người dùng đang đăng nhập. **Đăng xuất/đổi người dùng
+  xóa inbox và cấu hình nhập trên thiết bị**, dừng thu nhận; cần bật lại sau đăng nhập.
+  Quyền hệ thống Android không tự bị thu hồi khi đăng xuất.
+- Không tạo bảng draft hay migration Supabase. ID giao dịch là UUID v5 từ
+  `user_id + fingerprint`; receipt nhập cục bộ được commit cùng giao dịch/tags/outbox.
+  Nếu lưu giao dịch thành công nhưng đóng draft lỗi, bấm Lưu lại sẽ đóng draft mà
+  không tạo thêm giao dịch hoặc ghi đè bản đã sửa. Chỉ các trường giao dịch đã duyệt
+  được gửi qua repository/sync hiện có, không gửi model draft lên Supabase.
+- Fingerprint SHA-256 ưu tiên reference, ngân hàng, phần cuối tài khoản/thẻ,
+  số tiền/tiền tệ/hướng giao dịch. Khi không có reference, dùng thêm ngày giờ và mô tả;
+  nếu không có giờ trong text thì dùng bucket phút và notification key.
+  Hai giao dịch cùng số tiền lúc 10:00 và 14:00 được giữ riêng.
+
+### Thử parser và chạy kiểm thử
+
+Bản **debug** có nút **Thử bộ phân tích** trong cài đặt nhập ngân hàng: dán nội
+dung, chọn MB/VietinBank/BIDV/Generic rồi Phân tích. Đây chỉ là preview, **không tạo
+draft**, không lưu text, không đồng bộ. Bản release không mở được chức năng này.
+
+Từ thư mục gốc repository:
+
+```bash
+# Flutter: domain, repository, UI, retry và điều hướng widget
+(cd linux/packages/finance_core && flutter test)
+(cd android && flutter analyze && flutter test)
+(cd linux && flutter analyze && flutter test)
+
+# Kotlin: parser, Room và NotificationListenerService với Robolectric
+(cd android/android && ./gradlew :app:testDebugUnitTest)
+
+# Build / chạy trên Samsung đang kết nối
+python3 linux/tool/flutter_client.py android build apk --debug
+python3 linux/tool/flutter_client.py android run -d R5CW32L96TB
+```
+
+`JAVA_HOME`, Android SDK và Flutter phải được cấu hình theo phần cài đặt ở trên.
+Lần đầu chạy Gradle test cần mạng để tải Room/KSP/Robolectric. Không cần thêm biến
+môi trường hoặc khóa API nào cho tính năng này.
+
+### Giới hạn cần biết
+
+- Chỉ nhận thông báo từ lúc bật quyền **và** bật nhập; không nhập lịch sử cũ.
+- Đóng màn hình Flutter không làm mất khả năng thu nhận của native service.
+  Tuy nhiên **Force stop**, thu hồi quyền, hạn chế pin của hãng, thông báo bị ẩn
+  hoặc ngân hàng không phát thông báo có thể khiến không nhận được; không có cơ chế
+  phục hồi lịch sử đã bỏ lỡ. Sau reboot cần mở khóa điện thoại để dùng vùng lưu trữ.
+- Với thông báo thiếu reference/thời gian, chống trùng chỉ là heuristic: có thể
+  bỏ sót giao dịch giống hệt nhau trong cùng phút hoặc nhận lặp khi ngân hàng đổi
+  nội dung/key/thời điểm. Vì vậy luôn duyệt trước khi xác nhận.
+- Không đối chiếu với giao dịch đã nhập tay: bỏ qua draft nếu bạn đã ghi khoản đó.
+- Không có đồng bộ draft, tự ghép chuyển khoản, tỷ giá, OCR, SMS hay mã hóa database
+  riêng bằng SQLCipher. Dữ liệu nằm trong vùng riêng của app, Android backup đã tắt.
+- Danh sách pending chia trang 100 draft. Sửa trên form có hiệu lực khi Lưu;
+  đóng form sẽ bỏ các sửa chưa xác nhận.
+- Test tự động có kiểm tra service chạy không cần Flutter, nhưng vẫn cần thử với
+  thông báo ngân hàng thật và widget trên launcher Samsung để xác nhận hành vi
+  của từng phiên bản ứng dụng/ngân hàng và chế độ tiết kiệm pin trên máy.
+
+Chi tiết thiết kế và checklist: [bank-notification-import.md](linux/docs/bank-notification-import.md).
+
+### Số dư ngân hàng và trả góp
+
+- Trong **Cài đặt → Nhập thông báo ngân hàng**, gán nguồn MB/VietinBank/BIDV vào đúng tài khoản. Thông báo giao dịch thành công có trường `SD:`, `Số dư:` hoặc `Balance:` sẽ cập nhật mốc số dư của tài khoản đó. VND và USD được giữ nguyên, không quy đổi; thông báo thất bại, số dư mơ hồ hoặc khác tiền tệ tài khoản không được áp dụng.
+- Android lưu mốc ngay cả khi Flutter đóng. Khi app đang chạy, số dư cập nhật qua kho SQLite hiện có; khi app đóng, mở lại để chuyển mốc sang SQLite và đồng bộ Supabase/Linux. Chỉ số dư chuẩn hóa và thời điểm được đồng bộ, không gửi nội dung thông báo.
+- Số dư hiển thị = số dư ngân hàng gần nhất + biến động giao dịch **sau** thời điểm đó. Giao dịch trước hoặc đúng mốc đã nằm trong số dư ngân hàng, nên duyệt sau cũng không cộng/trừ lần nữa. Chi tiết tài khoản hiển thị thời điểm mốc. Nếu không có mốc thì vẫn tính từ số dư đầu kỳ. Không cần chấp nhận bản nháp để cập nhật số dư.
+- Form duyệt ngân hàng để **Mô tả trống**, không tự chọn danh mục; bạn có thể điền theo ý mình. Số tiền, tiền tệ, chiều tiền, tài khoản và ngày giờ được gợi ý.
+- Khi tạo **Chi tiêu**, tick **Trả góp**: nhập **số tiền trả mỗi tháng**, số tháng (1–60), ngày trả (mặc định 24). Kỳ đầu vào tháng sau ngày giao dịch đang chọn. Tháng thiếu ngày 29–31 dùng ngày cuối tháng. Ví dụ 100.000đ/tháng × 6 tháng tạo 6 kỳ 100.000đ, không ghi thêm khoản chi tổng lúc mua.
+- Các kỳ được lưu nguyên tử và đồng bộ ngay với ngày tương lai, không cần máy chủ lập lịch. Đến ngày hẹn, kỳ được tính vào số dư và thống kê; các kỳ tương lai vẫn xem được bằng bộ lọc tháng để sửa/xóa riêng. Khi app mở liên tục, số dư/thống kê làm mới theo phút. Đây là ghi sổ, **không phải tự động chuyển tiền/trích nợ ngân hàng**.
+- Giới hạn một lần lưu là 100 dòng (bao gồm kỳ và liên kết thẻ); nếu chọn quá nhiều tháng kèm nhiều thẻ, form yêu cầu giảm lựa chọn. Chưa có sửa/hủy cả chuỗi một lần.
+- Chạy migration `linux/supabase/migrations/004_bank_balances_installments.sql` bằng công cụ migration trước khi chạy bản mới; cập nhật cả Android và Linux. Migration chỉ thêm cột/ràng buộc/trigger, giữ nguyên RLS và dữ liệu cũ.
+- Mỗi nguồn ngân hàng hiện ánh xạ một tài khoản. Nếu một app ngân hàng gửi thông báo cho nhiều tài khoản/thẻ, chưa nên dùng ánh xạ này cho tất cả; cần bổ sung ánh xạ theo hậu tố tài khoản. Thời gian thiếu trong thông báo dùng giờ nhận; các giao dịch cùng thời điểm hoặc thông báo đến muộn không có thời gian gốc vẫn có giới hạn đối soát.
+
+## Logo và bộ cài Finance Inbox
+
+Logo gốc là `logo.png`. Icon launcher dùng phần chiếc ví, được tạo bằng
+`python3 linux/tool/generate_icons.py` (cần Pillow). Android hiển thị tên Finance Inbox;
+gói Linux có icon và shortcut trong menu ứng dụng.
+
+### Cài Android bằng APK
+
+File: `android/build/installers/finance-inbox-1.0.0.apk`.
+Chép file sang điện thoại, mở file và cho phép ứng dụng quản lý file cài ứng dụng khi Android hỏi.
+Đây là APK release ký bằng khóa riêng, không phải bản debug.
+Nếu đang có bản debug, Android không cho cài đè vì khác chữ ký: hãy đồng bộ dữ liệu,
+xử lý hết bản nháp thông báo ngân hàng trước khi gỡ bản debug và cài release.
+Gỡ ứng dụng sẽ xóa dữ liệu cục bộ và inbox chưa xác nhận. Không cần gỡ khi nâng cấp
+các bản release được ký bằng cùng khóa.
+
+Build lại (Flutter, JDK 21 và Android SDK đã nằm trong PATH):
+
+```bash
+python3 linux/tool/build_apk.py
+```
+
+Lần đầu công cụ tạo khóa và mật khẩu trong `android/signing/`, được Git bỏ qua.
+**Sao lưu riêng toàn bộ thư mục này ở nơi an toàn**; cần cùng khóa cho các bản cập nhật sau.
+Không chia sẻ hoặc push thư mục đó. Build chỉ nhúng SUPABASE_URL và SUPABASE_ANON_KEY
+qua wrapper hiện có; không nhúng thông tin quản trị PostgreSQL.
+
+### Cài Ubuntu bằng .deb
+
+Bản hiện tại dành cho **Ubuntu 24.04 / Zorin OS 18, x86_64 (amd64)**.
+Không cam kết chạy trên Ubuntu 22.04 hoặc máy ARM; cần build riêng trên môi trường phù hợp.
+
+```bash
+sudo apt install ./linux/build/installers/finance-inbox_1.0.0-1_amd64.deb
+```
+
+Sau đó mở **Finance Inbox** từ menu ứng dụng. Gói cài đặt ứng dụng vào `/opt/finance-inbox`,
+không yêu cầu Flutter trên máy sử dụng. GNOME Keyring dùng để giữ phiên đăng nhập an toàn.
+
+Build và đóng gói lại:
+
+```bash
+python3 linux/tool/flutter_client.py linux build linux
+python3 linux/tool/package_deb.py
+```
+
+Bộ cài nằm trong các thư mục `build/installers/`, không commit vào Git.

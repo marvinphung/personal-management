@@ -1,3 +1,4 @@
+import '../features/bank_import/bank_draft_repository.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -83,12 +84,22 @@ class WorkspaceController extends AsyncNotifier<UserWorkspace?> {
     final client = ref.read(clientProvider);
     return _lifecycle.synchronized(() async {
       if (generation != _generation) return null;
-      if (_current?.repository.userId == user) return _current;
+      if (_current?.repository.userId == user) {
+        await ref.read(bankDraftRepositoryProvider).setOwner(user);
+        return _current;
+      }
       if (_current != null) {
         await _current!.close(clear: true);
         _current = null;
       }
+      await ref.read(bankDraftRepositoryProvider).setOwner(user);
       if (user == null) return null;
+      if (BankDraftRepository.supported) {
+        await ref.read(bankDraftRepositoryProvider).configure({
+          'language':
+              ref.read(preferencesProvider).getString('language.$user') ?? 'en',
+        });
+      }
       final directory = await getApplicationSupportDirectory();
       await directory.create(recursive: true);
       final db = LocalDatabase.file(
@@ -118,6 +129,7 @@ class WorkspaceController extends AsyncNotifier<UserWorkspace?> {
   Future<void> signOut() async {
     ++_generation;
     await _lifecycle.synchronized(() async {
+      await ref.read(bankDraftRepositoryProvider).setOwner(null);
       final current = _current;
       _current = null;
       if (current != null) await current.close(clear: true);
@@ -152,8 +164,12 @@ final recordsProvider = FutureProvider.family<List<Record>, Entity>((
     limit: entity == Entity.transactions ? 100 : null,
   );
 });
+final calendarTickProvider = StreamProvider<int>(
+  (ref) => Stream.periodic(const Duration(minutes: 1), (i) => i),
+);
 final balanceProvider = FutureProvider<Map<String, int>>((ref) async {
   ref.watch(databaseEventsProvider);
+  ref.watch(calendarTickProvider);
   final w = await ref.watch(workspaceProvider.future);
   return await w?.db.balances() ?? {};
 });
@@ -174,6 +190,7 @@ final monthProvider = NotifierProvider<MonthController, DateTime>(
 );
 final monthTransactionsProvider = FutureProvider<List<Record>>((ref) async {
   ref.watch(databaseEventsProvider);
+  ref.watch(calendarTickProvider);
   final month = ref.watch(monthProvider);
   final w = await ref.watch(workspaceProvider.future);
   return await w?.db.list(Entity.transactions, month: month) ?? [];

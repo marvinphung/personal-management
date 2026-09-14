@@ -1,5 +1,66 @@
 // English messages are stable presentation keys, never database values.
 const vietnamese = <String, String>{
+  'Bank balance at {date}: {amount}': 'Số dư ngân hàng lúc {date}: {amount}',
+  'Installments': 'Trả góp',
+  'Monthly payment': 'Số tiền trả mỗi tháng',
+  'Number of months': 'Số tháng trả góp',
+  'Payment day': 'Ngày trả hàng tháng',
+  'First payment: {date}': 'Kỳ đầu: {date}',
+  'Enter the monthly payment. Short months use their last day. Future payments do not reduce your current balance.':
+      'Nhập số tiền trả mỗi tháng. Tháng thiếu ngày sẽ dùng ngày cuối tháng. Các kỳ chưa đến hạn chưa trừ vào số dư hiện tại.',
+  'Choose 1–60 months and a day from 1–31': 'Chọn 1–60 tháng và ngày từ 1–31',
+  'Too many installments and tags; reduce months or tags':
+      'Quá nhiều kỳ trả góp và thẻ; hãy giảm số tháng hoặc thẻ',
+
+  "Account currency: {currency}": "Tiền tệ của tài khoản: {currency}",
+  "Bank Notification Import": "Nhập thông báo ngân hàng",
+  "Pending transactions": "Giao dịch chờ duyệt",
+  "Confirm bank transaction": "Xác nhận giao dịch ngân hàng",
+  "Review every field before confirming. No currency conversion is performed.":
+      "Kiểm tra các thông tin trước khi xác nhận. Ứng dụng không quy đổi tiền tệ.",
+  "Choose income, expense or transfer.":
+      "Chọn thu nhập, chi tiêu hoặc chuyển khoản.",
+  "Bank drafts stay on this Android device until you confirm.":
+      "Bản nháp ngân hàng chỉ nằm trên thiết bị Android này cho đến khi bạn xác nhận.",
+  "All caught up": "Đã xử lý hết",
+  "Time uses notification arrival; please review.":
+      "Đang dùng thời điểm nhận thông báo; hãy kiểm tra lại.",
+  "Ignore": "Bỏ qua",
+  "Review & confirm": "Duyệt và xác nhận",
+  "Previous": "Trước",
+  "Next": "Tiếp",
+  "Could not open the bank inbox. Please retry.":
+      "Không mở được hộp thư ngân hàng. Hãy thử lại.",
+  "Could not update the draft. Please retry.":
+      "Không cập nhật được bản nháp. Hãy thử lại.",
+  "Could not update bank import settings.":
+      "Không cập nhật được cài đặt nhập thông báo ngân hàng.",
+  "Only configured bank apps are processed. Parsing is local, without AI. Failed transactions are ignored. Every draft requires your confirmation.":
+      "Chỉ xử lý ứng dụng ngân hàng đã cấu hình. Phân tích ngay trên máy, không dùng AI. Giao dịch thất bại bị bỏ qua. Mọi bản nháp đều cần bạn xác nhận.",
+  "Automatic transaction detection": "Tự động phát hiện giao dịch",
+  "Notification access": "Quyền truy cập thông báo",
+  "Enabled": "Đã bật",
+  "Disabled": "Đã tắt",
+  "Enable notification access so the app can detect bank transactions automatically.":
+      "Bật quyền truy cập thông báo để ứng dụng tự động phát hiện giao dịch ngân hàng.",
+  "Open notification access settings": "Mở cài đặt truy cập thông báo",
+  "Could not open notification access settings.":
+      "Không mở được cài đặt truy cập thông báo.",
+  "Default finance account": "Tài khoản tài chính mặc định",
+  "Choose during review": "Chọn khi duyệt",
+  "Add Finance Inbox from your Android home screen widget picker. Tapping it opens pending transactions.":
+      "Thêm tiện ích Finance Inbox từ màn hình chính Android. Chạm tiện ích để mở giao dịch chờ duyệt.",
+  "Signing out clears this device’s bank drafts and import settings. Enable import again after signing in.":
+      "Đăng xuất sẽ xóa bản nháp ngân hàng và cài đặt nhập trên máy này. Bật lại sau khi đăng nhập.",
+  "Test parser": "Thử bộ phân tích",
+  "Paste bank notification here": "Dán thông báo ngân hàng vào đây",
+  "Parse": "Phân tích",
+  "Could not parse this notification.": "Không phân tích được thông báo này.",
+  "Preview only. This does not create a draft or a transaction.":
+      "Chỉ xem kết quả thử. Không tạo bản nháp hoặc giao dịch.",
+  "Transaction saved locally. Retry to close the draft.":
+      "Đã lưu giao dịch trên máy. Thử lại để đóng bản nháp.",
+
   "Personal Finance": "Tài chính cá nhân",
   "Personal Finance 1.0": "Tài chính cá nhân 1.0",
   "Dashboard": "Tổng quan",

@@ -1,3 +1,5 @@
+import 'dart:async';
+import '../features/bank_import/bank_draft_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/localization/app_language.dart';
@@ -27,7 +29,19 @@ class LanguageController extends Notifier<String?> {
         .setString('language.$user', value);
     if (!saved) throw StateError('Language preference was not saved');
     // A session change during the write must not apply one user's choice to another.
-    if (ref.read(sessionProvider)?.user.id == user) state = value;
+    if (ref.read(sessionProvider)?.user.id == user) {
+      state = value;
+      if (BankDraftRepository.supported) {
+        // The widget preference is secondary; a bridge failure must not undo
+        // the app's successfully persisted language choice.
+        unawaited(
+          ref
+              .read(bankDraftRepositoryProvider)
+              .configure({'language': value})
+              .catchError((Object _) {}),
+        );
+      }
+    }
   }
 }
 

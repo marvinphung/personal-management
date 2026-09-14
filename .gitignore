@@ -47,3 +47,8 @@ __pycache__/
 **/key.properties
 **/.idea/
 *.iml
+
+# Local signing credentials and distributable packages
+android/signing/
+*.apk
+*.deb

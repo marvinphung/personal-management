@@ -1,15 +1,19 @@
 plugins {
+    id("com.google.devtools.ksp") version "2.3.12"
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
+    buildFeatures { buildConfig = true }
     namespace = "app.personalfinance.finance_android"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -60,4 +64,19 @@ gradle.taskGraph.whenReady {
             require(!System.getenv(it).isNullOrBlank()) { "Missing release signing environment variable: $it" }
         }
     }
+}
+
+ dependencies {
+    implementation("androidx.room:room-runtime:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+ }
+ ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
+dependencies { coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5") }
+
+// Flutter assets are inputs to AGP's Robolectric APK packaging as well.
+tasks.configureEach {
+    if (name == "packageDebugUnitTestForUnitTest") dependsOn("copyFlutterAssetsDebug")
 }

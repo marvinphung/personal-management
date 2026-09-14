@@ -28,7 +28,8 @@ class DashboardScreen extends ConsumerWidget {
               (t) =>
                   t.text('currency') == currency &&
                   t.text('purpose') == 'normal' &&
-                  t.text('type') == 'expense',
+                  t.text('type') == 'expense' &&
+                  !Ledger.isScheduled(t),
             );
         final byCategory = <String, int>{}, byTag = <String, int>{};
         for (final t in spending) {

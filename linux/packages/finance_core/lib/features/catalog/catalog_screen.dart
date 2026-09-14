@@ -183,6 +183,11 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
             'type': type,
             'currency': currency,
             'opening_balance': value,
+            if (widget.record != null &&
+                widget.record!.text('currency') != currency) ...{
+              'bank_balance': null,
+              'bank_balance_at': null,
+            },
             'is_archived': archived,
           });
         }
@@ -340,6 +345,19 @@ Future<void> showAccountDetail(
                 Money.format(balance, account.text('currency')),
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
+              if (account.data['bank_balance_at'] != null)
+                Text(
+                  context.tr('Bank balance at {date}: {amount}', {
+                    'date': context.dateLabel(
+                      account.date('bank_balance_at'),
+                      time: true,
+                    ),
+                    'amount': Money.format(
+                      account.money('bank_balance'),
+                      account.text('currency'),
+                    ),
+                  }),
+                ),
               const SizedBox(height: 20),
               Text(
                 context.tr('Selected month income: {amount}', {

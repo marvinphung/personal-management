@@ -1,3 +1,8 @@
+import 'installments.dart';
+import '../bank_import/bank_draft.dart';
+import '../bank_import/bank_confirmation.dart';
+import '../bank_import/bank_draft_repository.dart';
+import '../bank_import/bank_providers.dart';
 import '../../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +20,8 @@ Future<void> showTransactionForm(BuildContext context, {Record? record}) =>
 
 class TransactionForm extends ConsumerStatefulWidget {
   final Record? record;
-  const TransactionForm({super.key, this.record});
+  final BankDraft? bankDraft;
+  const TransactionForm({super.key, this.record, this.bankDraft});
   @override
   ConsumerState<TransactionForm> createState() => _TransactionFormState();
 }
@@ -26,6 +32,10 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       note = TextEditingController(),
       tagInput = TextEditingController();
   String type = 'expense';
+  bool installments = false;
+  int installmentMonths = 6, installmentDay = 24;
+  Record? installmentTemplate;
+  String? reviewCurrency;
   String? account, from, to, category, error;
   DateTime occurred = DateTime.now();
   final selectedTags = <String>{};
@@ -39,6 +49,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       description.text = r.text('description');
       note.text = r.text('note');
       type = r.text('type');
+      if (widget.bankDraft != null) reviewCurrency = r.text('currency');
       account = r.data['account_id'];
       from = r.data['from_account_id'];
       to = r.data['to_account_id'];
@@ -67,6 +78,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           .firstOrNull;
       if (picked == null) {
         throw const FormatException('Create or select an account first');
+      }
+      if (reviewCurrency != null && reviewCurrency != picked.text('currency')) {
+        throw const FormatException('Account currency does not match');
       }
       final value = Money.parse(amount.text, currency: picked.text('currency'));
       await saveAndSync(ref, (repository) async {
@@ -103,9 +117,40 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                 repository.create(Entity.tags, {'name': name}),
           );
         }
-        await repository.saveTransaction(transaction, chosen);
+        if (widget.bankDraft != null) {
+          await BankConfirmation.save(
+            repository,
+            widget.bankDraft!,
+            transaction,
+            chosen,
+          );
+        } else if (installments && type == 'expense') {
+          installmentTemplate ??= transaction;
+          await Installments.save(
+            repository,
+            transaction.patch({'id': installmentTemplate!.id}),
+            chosen,
+            months: installmentMonths,
+            day: installmentDay,
+          );
+        } else {
+          await repository.saveTransaction(transaction, chosen);
+        }
         await repository.rememberSelections(picked.id, category);
       });
+      if (widget.bankDraft != null) {
+        try {
+          await ref
+              .read(bankDraftRepositoryProvider)
+              .finish(widget.bankDraft!, confirmed: true);
+        } catch (_) {
+          throw const FormatException(
+            'Transaction saved locally. Retry to close the draft.',
+          );
+        }
+        ref.invalidate(bankDraftsProvider);
+        ref.invalidate(bankCountProvider);
+      }
       if (mounted) {
         Navigator.pop(context);
         message(
@@ -150,9 +195,15 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         links.hasValue;
     if (!initialized && accounts.isNotEmpty && ready) {
       initialized = true;
-      account ??= accounts.first.id;
-      from ??= accounts.first.id;
-      category ??= categories.firstOrNull?.id;
+      account ??=
+          (widget.bankDraft == null
+                  ? accounts.first
+                  : accounts
+                        .where((a) => a.text('currency') == reviewCurrency)
+                        .firstOrNull)
+              ?.id;
+      from ??= account;
+      if (widget.bankDraft == null) category ??= categories.firstOrNull?.id;
       if (widget.record != null) {
         for (final l in links.value!.where(
           (l) => l.text('transaction_id') == widget.record!.id,
@@ -175,7 +226,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       }
     }
     return FormDialog(
-      title: widget.record == null
+      title: widget.bankDraft != null
+          ? context.tr('Confirm bank transaction')
+          : widget.record == null
           ? context.tr('New transaction')
           : context.tr('Edit transaction'),
       busy: busy,
@@ -190,13 +243,47 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               : null),
       save: () => save(accounts, tags),
       children: [
+        if (widget.bankDraft != null) ...[
+          Text(
+            context.tr(
+              'Review every field before confirming. No currency conversion is performed.',
+            ),
+          ),
+          DropdownButtonFormField<String>(
+            initialValue: reviewCurrency,
+            decoration: InputDecoration(labelText: context.tr('Currency')),
+            items: const [
+              DropdownMenuItem(value: 'VND', child: Text('VND')),
+              DropdownMenuItem(value: 'USD', child: Text('USD')),
+            ],
+            onChanged: busy
+                ? null
+                : (value) => setState(() => reviewCurrency = value),
+          ),
+          Text(
+            context.tr('Account currency: {currency}', {
+              'currency':
+                  accounts
+                      .where(
+                        (a) => a.id == (type == 'transfer' ? from : account),
+                      )
+                      .firstOrNull
+                      ?.text('currency') ??
+                  '—',
+            }),
+          ),
+          if (type == 'unknown')
+            Text(context.tr('Choose income, expense or transfer.')),
+        ],
         TextField(
           controller: amount,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           style: Theme.of(context).textTheme.headlineMedium,
           decoration: InputDecoration(
-            labelText: context.tr('Amount'),
+            labelText: context.tr(
+              installments && type == 'expense' ? 'Monthly payment' : 'Amount',
+            ),
             hintText: context.tr('45000 or 45k'),
           ),
           textInputAction: TextInputAction.next,
@@ -210,12 +297,65 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               label: Text(context.tr('Transfer')),
             ),
           ],
-          selected: {type},
+          emptySelectionAllowed: type == 'unknown',
+          selected: type == 'unknown' ? <String>{} : {type},
           onSelectionChanged: (v) => setState(() {
-            type = v.first;
+            type = v.isEmpty ? 'unknown' : v.first;
             category = null;
           }),
         ),
+        if (widget.record == null && type == 'expense') ...[
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(context.tr('Installments')),
+            value: installments,
+            onChanged: busy
+                ? null
+                : (v) => setState(() => installments = v ?? false),
+          ),
+          if (installments) ...[
+            DropdownButtonFormField<int>(
+              initialValue: installmentMonths,
+              decoration: InputDecoration(
+                labelText: context.tr('Number of months'),
+              ),
+              items: List.generate(
+                60,
+                (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}')),
+              ),
+              onChanged: busy
+                  ? null
+                  : (v) => setState(() => installmentMonths = v!),
+            ),
+            DropdownButtonFormField<int>(
+              initialValue: installmentDay,
+              decoration: InputDecoration(labelText: context.tr('Payment day')),
+              items: List.generate(
+                31,
+                (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}')),
+              ),
+              onChanged: busy
+                  ? null
+                  : (v) => setState(() => installmentDay = v!),
+            ),
+            Text(
+              context.tr('First payment: {date}', {
+                'date': context.dateLabel(
+                  Installments.dates(
+                    occurred,
+                    installmentMonths,
+                    installmentDay,
+                  ).first,
+                ),
+              }),
+            ),
+            Text(
+              context.tr(
+                'Enter the monthly payment. Short months use their last day. Future payments do not reduce your current balance.',
+              ),
+            ),
+          ],
+        ],
         TextField(
           controller: description,
           decoration: InputDecoration(

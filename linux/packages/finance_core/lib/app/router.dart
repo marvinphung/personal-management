@@ -1,3 +1,8 @@
+import 'package:flutter/foundation.dart';
+import '../features/bank_import/bank_draft_repository.dart';
+import '../features/bank_import/bank_providers.dart';
+import '../features/bank_import/pending_bank_screen.dart';
+import '../features/bank_import/bank_import_settings.dart';
 import '../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +54,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/transactions',
             builder: (_, _) => const TransactionScreen(),
           ),
+          if (BankDraftRepository.supported) ...[
+            GoRoute(
+              path: '/transactions/pending',
+              builder: (_, _) => const PendingBankScreen(),
+            ),
+            GoRoute(
+              path: '/settings/bank-import',
+              builder: (_, _) => const BankImportSettings(),
+            ),
+            if (kDebugMode)
+              GoRoute(
+                path: '/settings/bank-import/parser',
+                builder: (_, _) => const BankParserScreen(),
+              ),
+          ],
           GoRoute(path: '/debts', builder: (_, _) => const DebtScreen()),
           GoRoute(path: '/notes', builder: (_, _) => const NotesScreen()),
           GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
@@ -117,7 +137,11 @@ class FinanceShell extends ConsumerWidget {
         final desktop = MediaQuery.sizeOf(context).width >= 850;
         final title =
             destinations.where((d) => d.$1 == location).firstOrNull?.$2 ??
-            context.tr('More');
+            (location == '/transactions/pending'
+                ? 'Pending transactions'
+                : location.startsWith('/settings/bank-import')
+                ? 'Bank Notification Import'
+                : 'More');
         return CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
@@ -133,6 +157,17 @@ class FinanceShell extends ConsumerWidget {
               appBar: AppBar(
                 title: Text(context.tr(title)),
                 actions: [
+                  if (BankDraftRepository.supported)
+                    IconButton(
+                      tooltip: context.tr('Pending transactions'),
+                      onPressed: () => context.go('/transactions/pending'),
+                      icon: Badge(
+                        label: Text(
+                          '${ref.watch(bankCountProvider).value ?? 0}',
+                        ),
+                        child: const Icon(Icons.inbox_outlined),
+                      ),
+                    ),
                   IconButton(
                     tooltip: context.tr('Search (Ctrl+K)'),
                     onPressed: () => showGlobalSearch(context),

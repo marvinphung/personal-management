@@ -15,7 +15,19 @@ class FinanceRepository {
   Record create(Entity entity, Map<String, dynamic> data, {String? id}) =>
       Record.create(entity, userId, data, id: id);
   Future<void> save(Record record) => saveBatch([record]);
-  Future<void> saveBatch(List<Record> records) => lock.synchronized(() async {
+  Future<void> saveBatch(List<Record> records, {String? importKey}) =>
+      lock.synchronized(() => _saveBatch(records, importKey: importKey));
+
+  Future<void> _saveBatch(List<Record> records, {String? importKey}) async {
+    // Receipt and outbox are committed atomically. A retry never overwrites an
+    // already confirmed transaction, including one edited or deleted later.
+    if (importKey != null) {
+      if (await db.metadata(importKey) != null) return;
+      final transaction = records.firstWhere(
+        (r) => r.entity == Entity.transactions,
+      );
+      if (await db.get(Entity.transactions, transaction.id) != null) return;
+    }
     final mutation = const Uuid().v4(),
         now = DateTime.now().toUtc().toIso8601String();
     final rows = records
@@ -31,8 +43,35 @@ class FinanceRepository {
     for (final row in rows) {
       await validate(row, rows);
     }
-    await db.enqueue(mutation, rows);
-  });
+    await db.enqueue(mutation, rows, receipt: importKey);
+  }
+
+  Future<void> applyBankBalance(Map<String, dynamic> snapshot) =>
+      lock.synchronized(() async {
+        final id = snapshot['account'] as String;
+        final amount = snapshot['amount'] as int;
+        final at = DateTime.fromMillisecondsSinceEpoch(
+          snapshot['at'] as int,
+          isUtc: true,
+        );
+        final account = await db.get(Entity.accounts, id);
+        if (account == null ||
+            account.deleted ||
+            account.text('user_id') != userId ||
+            account.text('currency') != snapshot['currency'] ||
+            amount.abs() > Money.maxMinor) {
+          return;
+        }
+        final old = DateTime.tryParse(account.text('bank_balance_at'));
+        if (old != null && !at.isAfter(old)) return;
+        await _saveBatch([
+          account.patch({
+            'bank_balance': amount,
+            'bank_balance_at': at.toIso8601String(),
+          }),
+        ]);
+      });
+
   Future<void> rememberSelections(String account, String? category) async {
     await db.setMetadata('recent_account', account);
     if (category != null) await db.setMetadata('recent_category', category);
@@ -129,6 +168,10 @@ class FinanceRepository {
     }
     if (row.entity == Entity.transactions) {
       final type = row.text('type');
+      if (row.data['installment_group'] != null &&
+          (type != 'expense' || row.text('purpose') != 'normal')) {
+        throw const FormatException('Installments require a normal expense');
+      }
       if (!TransactionType.values.any((v) => v.name == type)) {
         throw const FormatException('Choose a transaction type');
       }
@@ -189,7 +232,11 @@ class FinanceRepository {
     );
   }
 
-  Future<void> saveTransaction(Record transaction, List<Record> tags) async {
+  Future<void> saveTransaction(
+    Record transaction,
+    List<Record> tags, {
+    String? importKey,
+  }) async {
     final links = await db.list(Entity.transactionTags);
     final now = DateTime.now().toUtc().toIso8601String();
     final rows = <Record>[transaction];
@@ -218,6 +265,6 @@ class FinanceRepository {
             .patch({'deleted_at': null}),
       );
     }
-    await saveBatch(rows);
+    await saveBatch(rows, importKey: importKey);
   }
 }
