@@ -46,6 +46,10 @@ class BankDraftFlutterBridge(private val activity: Activity, messenger: BinaryMe
                                     "connected" to ListenerConnection.connected,
                                     "lastBankAt" to prefs.getLong("last_bank_at", 0L),
                                     "lastOutcome" to prefs.getString("last_outcome", null),
+                                    "connectedAt" to prefs.getLong("listener_connected_at", 0L),
+                                    "disconnectedAt" to prefs.getLong("listener_disconnected_at", 0L),
+                                    "rebindAt" to prefs.getLong("listener_rebind_at", 0L),
+                                    "rebindResult" to prefs.getString("listener_rebind_result", null),
                                     "sources" to BankSourceRegistry.sources.map { source -> mapOf(
                                         "code" to source.code, "name" to source.name,
                                         "enabled" to prefs.getBoolean("enabled.${source.code}", true),

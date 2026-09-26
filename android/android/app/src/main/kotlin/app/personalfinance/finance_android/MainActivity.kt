@@ -4,9 +4,15 @@ import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import app.personalfinance.finance_android.banknotification.bridge.BankDraftFlutterBridge
+import app.personalfinance.finance_android.banknotification.ListenerConnection
 
 class MainActivity : FlutterActivity() {
     private var bankBridge: BankDraftFlutterBridge? = null
+    override fun onResume() {
+        super.onResume()
+        ListenerConnection.ensureBound(this)
+        app.personalfinance.finance_android.banknotification.BankInbox.notifyStatus()
+    }
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         bankBridge = BankDraftFlutterBridge(this, flutterEngine.dartExecutor.binaryMessenger)

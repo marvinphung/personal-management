@@ -17,9 +17,12 @@ object ListenerConnection {
         return Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
             ?.split(':')?.any { ComponentName.unflattenFromString(it) == component } == true
     }
-    fun setConnected(context: Context, value: Boolean) {
+    @Synchronized fun setConnected(context: Context, value: Boolean) {
         connected = value
         if (value) lastRequest = null
+        BankInbox.preferences(context).edit()
+            .putLong(if (value) "listener_connected_at" else "listener_disconnected_at", System.currentTimeMillis())
+            .apply()
         BankInbox.notifyStatus()
     }
     @Synchronized fun ensureBound(context: Context, force: Boolean = false) {
@@ -28,6 +31,11 @@ object ListenerConnection {
         val now = SystemClock.elapsedRealtime()
         if (!force && lastRequest?.let { now - it < 30_000 } == true) return
         lastRequest = now
-        runCatching { NotificationListenerService.requestRebind(ComponentName(context, BankNotificationListenerService::class.java)) }
+        val result = runCatching {
+            NotificationListenerService.requestRebind(ComponentName(context, BankNotificationListenerService::class.java))
+        }
+        // A successful request is not evidence of a live connection; only the callback is.
+        prefs.edit().putLong("listener_rebind_at", System.currentTimeMillis())
+            .putString("listener_rebind_result", if (result.isSuccess) "requested" else "error").apply()
     }
 }
