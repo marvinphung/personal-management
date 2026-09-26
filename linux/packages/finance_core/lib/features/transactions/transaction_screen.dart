@@ -7,6 +7,7 @@ import '../../app/widgets.dart';
 import '../../core/database/record.dart';
 import '../../core/utils/money.dart';
 import 'transaction_form.dart';
+import '../debts/debt_screen.dart';
 
 class MonthSelector extends ConsumerWidget {
   const MonthSelector({super.key});
@@ -352,6 +353,19 @@ class TransactionDetail extends ConsumerWidget {
   const TransactionDetail({super.key, required this.record});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final debts = ref.watch(recordsProvider(Entity.debts)).value ?? <Record>[];
+    final payments =
+        ref.watch(recordsProvider(Entity.debtPayments)).value ?? <Record>[];
+    final payment = payments
+        .where((p) => p.text('linked_transaction_id') == record.id)
+        .firstOrNull;
+    final linkedDebt = debts
+        .where(
+          (d) =>
+              d.text('linked_transaction_id') == record.id ||
+              d.id == payment?.text('debt_id'),
+        )
+        .firstOrNull;
     final accounts = ref.watch(recordsProvider(Entity.accounts)).value ?? [],
         categories = ref.watch(recordsProvider(Entity.categories)).value ?? [],
         tags = ref.watch(recordsProvider(Entity.tags)).value ?? [],
@@ -439,7 +453,13 @@ class TransactionDetail extends ConsumerWidget {
             },
             child: Text(context.tr('Edit')),
           ),
-        ] else
+        ] else if (linkedDebt != null)
+          FilledButton.icon(
+            icon: const Icon(Icons.handshake_outlined),
+            onPressed: () => showDebtDetail(context, linkedDebt),
+            label: Text(context.tr('Open linked debt')),
+          )
+        else
           Text(context.tr('Manage through the linked debt.')),
       ],
     );

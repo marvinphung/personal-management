@@ -27,7 +27,7 @@ do $$ declare blocked boolean:=false; begin
 end $$;
 select public.finance_defaults();
 select public.finance_defaults();
-do $$ declare n int; begin select count(*) into n from public.categories where user_id='a1000000-0000-4000-8000-000000000001' and is_default; if n<>14 then raise exception 'Default categories not idempotent'; end if; end $$;
+do $$ declare n int; begin select count(*) into n from public.categories where user_id='a1000000-0000-4000-8000-000000000001' and is_default; if n<>15 then raise exception 'Default categories not idempotent'; end if; end $$;
 -- Each syncable table has an owner policy and RLS, independently of grants.
 reset role;
 do $$ declare tbl text; n int; begin

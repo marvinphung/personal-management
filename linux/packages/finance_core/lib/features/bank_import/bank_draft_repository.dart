@@ -59,6 +59,7 @@ class BankDraftRepository {
     });
   }
 
+  Future<void> reconnect() => _call<void>('reconnect');
   Future<void> openSettings() => _call<void>('openSettings');
   Future<bool> consumeOpenPending() async =>
       supported && (await _call<bool>('consumeOpenPending') ?? false);

@@ -63,6 +63,34 @@ void main() {
       );
     },
   );
+  test(
+    'bank loan confirmation creates one debt with its original currency and time',
+    () async {
+      final person = repo.create(Entity.people, {'name': 'Nam'});
+      final category = repo.create(Entity.categories, {'name': 'Cho vay'});
+      await repo.saveBatch([person, category]);
+      final tx = draft.toTransaction(repo, accountId: account.id).patch({
+        'category_id': category.id,
+      });
+      await expectLater(
+        BankConfirmation.save(repo, draft, tx, []),
+        throwsFormatException,
+      );
+      expect(await db.list(Entity.transactions), isEmpty);
+      expect(await db.list(Entity.debts), isEmpty);
+      await BankConfirmation.save(repo, draft, tx, [], borrower: person);
+      await BankConfirmation.save(repo, draft, tx, [], borrower: person);
+      final debt = (await db.list(Entity.debts)).single;
+      expect(debt.money('principal_amount'), 1999);
+      expect(debt.text('currency'), 'USD');
+      expect(debt.text('started_at'), tx.text('occurred_at'));
+      expect(debt.text('linked_transaction_id'), tx.id);
+      expect(
+        (await db.list(Entity.transactions)).single.text('purpose'),
+        'debt_disbursement',
+      );
+    },
+  );
   test('invalid save retains eligibility for later retry', () async {
     final row = draft.toTransaction(repo);
     await expectLater(

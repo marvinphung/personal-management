@@ -7,6 +7,7 @@ import '../../core/database/record.dart';
 import '../../core/utils/money.dart';
 import '../../core/utils/ledger.dart';
 import '../debts/debt_screen.dart';
+import '../../core/utils/tag_name.dart';
 
 class CatalogScreen extends ConsumerStatefulWidget {
   final Entity entity;
@@ -20,6 +21,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   @override
   Widget build(BuildContext context) {
     final balances = ref.watch(balanceProvider).value ?? {};
+    final categories = widget.entity == Entity.tags
+        ? ref.watch(recordsProvider(Entity.categories)).value ?? <Record>[]
+        : <Record>[];
     return Column(
       children: [
         Padding(
@@ -79,7 +83,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           : Icons.label_outline,
                     ),
                     title: Text(
-                      '${r.text('name')}${r.flag('is_archived') ? context.tr(' · Archived') : ''}',
+                      '${widget.entity == Entity.tags ? '#' : ''}${r.text('name')}${r.flag('is_archived') ? context.tr(' · Archived') : ''}',
                     ),
                     subtitle: widget.entity == Entity.accounts
                         ? Text(
@@ -87,6 +91,14 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                               balances[r.id] ?? 0,
                               r.text('currency'),
                             ),
+                          )
+                        : widget.entity == Entity.tags
+                        ? Text(
+                            categories
+                                    .where((c) => c.id == r.text('category_id'))
+                                    .firstOrNull
+                                    ?.text('name') ??
+                                context.tr('Category'),
                           )
                         : Text(
                             r.text('type').isNotEmpty
@@ -144,12 +156,13 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
       phone = TextEditingController();
   String type = '', currency = 'VND';
   bool archived = false, busy = false;
-  String? error;
+  String? error, category;
   @override
   void initState() {
     super.initState();
     final r = widget.record;
     name.text = r?.text('name') ?? '';
+    category = r?.data['category_id'] as String?;
     type =
         r?.text('type') ??
         (widget.entity == Entity.accounts ? 'cash' : 'expense');
@@ -192,10 +205,19 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
           });
         }
         if (widget.entity == Entity.categories) {
-          data.addAll({'type': type, 'is_archived': archived});
+          data.addAll({
+            'type': type,
+            'is_archived': archived,
+            'behavior':
+                widget.record?.text('behavior') == 'lending' ||
+                    (name.text.trim() == 'Cho vay' && type == 'expense')
+                ? 'lending'
+                : 'normal',
+          });
         }
         if (widget.entity == Entity.tags) {
-          data['name'] = name.text.trim().replaceFirst('#', '').toLowerCase();
+          data['name'] = normalizeTagName(name.text);
+          data['category_id'] = category;
         }
         if (widget.entity == Entity.people) {
           data.addAll({
@@ -232,6 +254,15 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
         autofocus: true,
         decoration: InputDecoration(labelText: context.tr('Name')),
       ),
+      if (widget.entity == Entity.tags)
+        RecordPicker(
+          label: context.tr('Category'),
+          value: category,
+          records: (ref.watch(recordsProvider(Entity.categories)).value ?? [])
+              .where((c) => !c.flag('is_archived') || c.id == category)
+              .toList(),
+          onChanged: (v) => setState(() => category = v),
+        ),
       if ([Entity.accounts, Entity.categories].contains(widget.entity))
         DropdownButtonFormField<String>(
           initialValue: type,
@@ -245,7 +276,9 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
                         DropdownMenuItem(value: v, child: Text(context.tr(v))),
                   )
                   .toList(),
-          onChanged: (v) => setState(() => type = v!),
+          onChanged: widget.record?.text('behavior') == 'lending'
+              ? null
+              : (v) => setState(() => type = v!),
         ),
       if (widget.entity == Entity.accounts) ...[
         DropdownButtonFormField<String>(

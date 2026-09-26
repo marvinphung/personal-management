@@ -28,8 +28,11 @@ void main() {
       final db = LocalDatabase.memory();
       final repo = FinanceRepository(db, 'user');
       final account = repo.create(Entity.accounts, {'name': 'Cash'}),
-          tag = repo.create(Entity.tags, {'name': 'coffee'}),
           category = repo.create(Entity.categories, {'name': 'Food'}),
+          tag = repo.create(Entity.tags, {
+            'name': 'coffee',
+            'category_id': category.id,
+          }),
           person = repo.create(Entity.people, {'name': 'Nam'});
       await repo.saveBatch([account, category, person]);
       final tx = repo.create(Entity.transactions, {
@@ -61,7 +64,13 @@ void main() {
     () async {
       final db = LocalDatabase.memory();
       final r = FinanceRepository(db, 'user');
-      final tag = r.create(Entity.tags, {'name': 'new'});
+      final category = r.create(Entity.categories, {'name': 'Khác'});
+      await r.save(category);
+      await db.acknowledge((await db.pending()).single.id);
+      final tag = r.create(Entity.tags, {
+        'name': 'new',
+        'category_id': category.id,
+      });
       await r.save(tag);
       final op = (await db.pending()).single;
       await db.reject(op);

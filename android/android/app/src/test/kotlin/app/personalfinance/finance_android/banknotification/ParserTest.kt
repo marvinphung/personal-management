@@ -7,6 +7,28 @@ import java.time.ZoneId
 import java.time.Instant
 
 class ParserTest {
+    @Test fun vietinbankBalanceNotificationFromIpay() {
+        val text = """
+            Tin biến động số dư
+            VietinBank:21/09/2026 20:38
+            TK:105880086153
+            GD:-60,000 VND
+            SDC:872,978 VND
+            ND:CT DI:142K269OZUDAY4QP QR - 1181689OS7R; tai iPay
+        """.trimIndent()
+        val p = ParserRouter.parse("vietinbank", "com.vietinbank.ipay", text, 1790000000000, zone)
+        assertEquals("vietinbank-generic-v1", p.parserId)
+        assertEquals(60000L, p.amountMinor)
+        assertEquals(Direction.expense, p.direction)
+        assertEquals(872978L, p.balanceMinor)
+        assertEquals("VND", p.balanceCurrency)
+        assertEquals("6153", p.accountHint)
+        assertEquals("notification_text", p.occurredAtSource)
+        assertEquals(Instant.parse("2026-09-21T13:38:00Z").toEpochMilli(), p.occurredAtMillis)
+        assertEquals("CT DI:142K269OZUDAY4QP QR - 1181689OS7R; tai iPay", p.descriptionCandidate)
+        assertTrue(p.canCreateDraft)
+    }
+
     @Test fun techcombankUsesConservativeCommonFields() {
         assertTrue(BankSourceRegistry.sources.any { it.code == "techcombank" && "vn.com.techcombank.bb.app" in it.packages })
         fun t(text: String) = ParserRouter.parse("techcombank", "vn.com.techcombank.bb.app", text, 1790000000000)

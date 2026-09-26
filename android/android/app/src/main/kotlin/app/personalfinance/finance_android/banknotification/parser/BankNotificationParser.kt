@@ -18,9 +18,9 @@ open class GenericVietnamBankParser(private val id: String = "generic-vietnam-v1
     private val unsettled = Regex("\\b(OTP|MA XAC THUC|VERIFICATION CODE|DANG XU LY|PENDING|YEU CAU|DE NGHI)\\b")
     private val explicit = Regex("\\b(?:SO TIEN GD|GD)\\s*:\\s*([+-]?\\s*\\d[\\d.,]*)\\s*(VND|USD)\\b")
     private val amount = Regex("(?<![\\d.,])([+-]\\s*\\d[\\d.,]*)\\s*(VND|USD)\\b")
-    private val balance = Regex("\\b(?:SD|SO DU|BALANCE)\\s*:")
+    private val balance = Regex("\\b(?:SD|SDC|SO DU|BALANCE)\\s*:")
     private val iso = Regex("\\b\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\b")
-    private val local = Regex("\\b\\d{2}/\\d{2}/\\d{2} \\d{2}:\\d{2}\\b")
+    private val local = Regex("\\b\\d{2}/\\d{2}/(?:\\d{2}|\\d{4}) \\d{2}:\\d{2}\\b")
     override fun parse(bank: String, source: String, raw: String, postedAt: Long, zone: ZoneId): ParsedBankTransaction {
         if (raw.length > 16384) return ParsedBankTransaction(bank, source, occurredAtMillis = postedAt, parserId = id)
         val text = normalize(raw)
@@ -46,13 +46,13 @@ open class GenericVietnamBankParser(private val id: String = "generic-vietnam-v1
             direction = when (signed.first()) { '+' -> Direction.income; '-' -> Direction.expense; else -> Direction.unknown },
             occurredAtMillis = date ?: postedAt, occurredAtSource = if (date != null) "notification_text" else "notification_post_time",
             descriptionCandidate = description(raw),
-            accountHint = Regex("\\b(?:TKTT:|TK)\\s*([\\dXx*]+)").find(raw)?.groupValues?.get(1)?.takeLast(4),
+            accountHint = Regex("\\b(?:TKTT|TK)\\s*:?\\s*([\\dXx*]+)").find(raw)?.groupValues?.get(1)?.takeLast(4),
             cardHint = Regex("\\[([\\d.*]{8,})]").find(raw)?.groupValues?.get(1)?.takeLast(4),
             referenceId = Regex("(?i)(?:Ma GD|Mã GD|transaction reference|reference)\\s*:?\\s*([A-Z0-9_-]+(?:\\s*/\\s*[A-Z0-9_-]+)?)").find(raw)?.groupValues?.get(1)?.replace(Regex("\\s+"), ""),
             status = if (failed) Status.failed else if (unsettled.containsMatchIn(text)) Status.unknown else Status.success,
             confidence = if (date == null) 0.8 else 1.0)
         if (result.status == Status.success) {
-            val balances = Regex("\\b(?:SD|SO DU|BALANCE)\\s*:\\s*([+-]?\\s*\\d[\\d.,]*)\\s*(VND|USD)\\b").findAll(text).toList()
+            val balances = Regex("\\b(?:SD|SDC|SO DU|BALANCE)\\s*:\\s*([+-]?\\s*\\d[\\d.,]*)\\s*(VND|USD)\\b").findAll(text).toList()
             val b = balances.singleOrNull()
             if (b != null) {
                 val value = b.groupValues[1].replace(" ", "")
@@ -65,10 +65,11 @@ open class GenericVietnamBankParser(private val id: String = "generic-vietnam-v1
     }
     private fun parseDate(text: String, zone: ZoneId): Long? {
         val match = iso.find(text)
-        val formatter = if (match != null) DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss", Locale.ROOT)
-            else DateTimeFormatterBuilder().appendPattern("dd/MM/").appendValueReduced(ChronoField.YEAR, 2, 2, 2000)
-                .appendPattern(" HH:mm").toFormatter(Locale.ROOT)
         val value = match?.value ?: local.find(text)?.value ?: return null
+        val formatter = if (match != null) DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss", Locale.ROOT)
+            else if (value.length == 14) DateTimeFormatterBuilder().appendPattern("dd/MM/").appendValueReduced(ChronoField.YEAR, 2, 2, 2000)
+                .appendPattern(" HH:mm").toFormatter(Locale.ROOT)
+            else DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm", Locale.ROOT)
         return runCatching { LocalDateTime.parse(value, formatter.withResolverStyle(ResolverStyle.STRICT)).atZone(zone).toInstant().toEpochMilli() }.getOrNull()
     }
     private fun description(raw: String): String? {

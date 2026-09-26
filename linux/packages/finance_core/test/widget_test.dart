@@ -73,7 +73,10 @@ void main() {
       find.widgetWithText(TextField, 'Description'),
       'Coffee',
     );
-    await tester.enterText(find.widgetWithText(TextField, 'Tags'), '#coffee');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Add tags (optional)'),
+      '#coffee',
+    );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     final saved = (await workspace.db.list(Entity.transactions)).single;
@@ -125,12 +128,115 @@ void main() {
       );
     },
   );
+  testWidgets(
+    'category chips select tags without typing and reset on category change',
+    (tester) async {
+      final repo = workspace.repository;
+      final food = repo.create(Entity.categories, {'name': 'Ăn uống'});
+      final travel = repo.create(Entity.categories, {'name': 'Đi lại'});
+      await repo.saveBatch([
+        food,
+        travel,
+        repo.create(Entity.accounts, {'name': 'Cash'}),
+      ]);
+      await repo.saveBatch([
+        repo.create(Entity.tags, {'name': 'caphe', 'category_id': food.id}),
+        repo.create(Entity.tags, {'name': 'xangxe', 'category_id': travel.id}),
+      ]);
+      await tester.pumpWidget(wrap(const TransactionForm()));
+      await tester.pumpAndSettle();
+      final picker = find.byWidgetPredicate(
+        (w) =>
+            w is DropdownButtonFormField<String> &&
+            w.decoration.labelText == 'Category',
+      );
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ăn uống').last);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(FilterChip, '#caphe'), findsOneWidget);
+      expect(find.widgetWithText(FilterChip, '#xangxe'), findsNothing);
+      await tester.ensureVisible(find.text('#caphe'));
+      await tester.tap(find.text('#caphe'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '#caphe'))
+            .selected,
+        true,
+      );
+      await tester.ensureVisible(picker);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Đi lại').last);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(FilterChip, '#caphe'), findsNothing);
+      await tester.ensureVisible(find.text('#xangxe'));
+      await tester.tap(find.text('#xangxe'));
+      await tester.enterText(find.widgetWithText(TextField, 'Amount'), '50k');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      final tx = (await workspace.db.list(Entity.transactions)).single;
+      expect(tx.text('category_id'), travel.id);
+      final links = await workspace.db.list(Entity.transactionTags);
+      expect(links, hasLength(1));
+      final tag = await workspace.db.get(
+        Entity.tags,
+        links.single.text('tag_id'),
+      );
+      expect(tag!.text('name'), 'xangxe');
+    },
+  );
+  testWidgets(
+    'Cho vay requires a borrower and creates a debt instead of spending',
+    (tester) async {
+      final repo = workspace.repository;
+      final category = repo.create(Entity.categories, {'name': 'Cho vay'});
+      final person = repo.create(Entity.people, {'name': 'Nam'});
+      await repo.saveBatch([
+        category,
+        person,
+        repo.create(Entity.accounts, {'name': 'MB Bank'}),
+      ]);
+      await tester.pumpWidget(wrap(const TransactionForm()));
+      await tester.pumpAndSettle();
+      expect(find.text('Borrower'), findsOneWidget);
+      expect(find.text('Installments'), findsNothing);
+      await tester.enterText(find.widgetWithText(TextField, 'Amount'), '1m');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Create or select a person first'), findsOneWidget);
+      expect(await workspace.db.list(Entity.transactions), isEmpty);
+      final picker = find.byWidgetPredicate(
+        (w) =>
+            w is DropdownButtonFormField<String> &&
+            w.decoration.labelText == 'Borrower',
+      );
+      await tester.ensureVisible(picker);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Nam').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      final tx = (await workspace.db.list(Entity.transactions)).single;
+      final debt = (await workspace.db.list(Entity.debts)).single;
+      expect(tx.text('purpose'), 'debt_disbursement');
+      expect(debt.text('linked_transaction_id'), tx.id);
+      expect(debt.text('person_id'), person.id);
+    },
+  );
   testWidgets('editing retains tags that finish loading after accounts', (
     tester,
   ) async {
     final repo = workspace.repository;
     final account = repo.create(Entity.accounts, {'name': 'Cash'});
-    final tag = repo.create(Entity.tags, {'name': 'coffee'});
+    final category = repo.create(Entity.categories, {'name': 'Ăn uống'});
+    await repo.save(category);
+    final tag = repo.create(Entity.tags, {
+      'name': 'coffee',
+      'category_id': category.id,
+    });
     await repo.save(account);
     final transaction = repo.create(Entity.transactions, {
       'type': 'expense',

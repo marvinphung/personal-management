@@ -8,6 +8,7 @@ import 'package:finance_core/core/sync/sync_engine.dart';
 import 'package:finance_core/features/bank_import/bank_draft.dart';
 import 'package:finance_core/features/bank_import/bank_draft_repository.dart';
 import 'package:finance_core/features/bank_import/pending_bank_screen.dart';
+import 'package:finance_core/features/bank_import/bank_import_settings.dart';
 import 'package:finance_core/features/transactions/transaction_form.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -21,7 +22,15 @@ import 'language_test.dart' show session;
 class FakeBankInbox extends BankDraftRepository {
   final List<BankDraft> rows = [];
   bool failFinish = false, open = false;
-  int finished = 0;
+  int finished = 0, reconnects = 0;
+  bool access = false, capture = false, connected = false;
+  @override
+  Future<void> reconnect() async {
+    reconnects++;
+    connected = true;
+    events.add("changed");
+  }
+
   @override
   Future<List<BankDraft>> pending({int offset = 0}) async =>
       rows.skip(offset).take(100).toList();
@@ -29,8 +38,9 @@ class FakeBankInbox extends BankDraftRepository {
   Future<int> count() async => rows.length;
   @override
   Future<Map<String, dynamic>> settings() async => {
-    'access': false,
-    'capture': false,
+    'access': access,
+    'capture': capture,
+    'connected': connected,
     'sources': <Map>[],
   };
   @override
@@ -105,6 +115,23 @@ void main() {
       );
 
   testWidgets(
+    'permission is distinct from connection and reconnect refreshes status',
+    (tester) async {
+      inbox.access = true;
+      inbox.capture = true;
+      await tester.pumpWidget(wrap(const BankImportSettings()));
+      await tester.pumpAndSettle();
+      expect(find.text('Enabled'), findsOneWidget);
+      expect(find.text('Disconnected'), findsOneWidget);
+      await tester.tap(find.text('Reconnect notification service'));
+      await tester.pumpAndSettle();
+      expect(inbox.reconnects, 1);
+      expect(find.text('Connected'), findsOneWidget);
+      expect(find.text('Reconnect notification service'), findsNothing);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
+  testWidgets(
     'native finish failure retains draft; retry keeps one exact USD transaction',
     (tester) async {
       final repo = workspace.repository;
@@ -113,6 +140,11 @@ void main() {
         'currency': 'USD',
       });
       await repo.save(account);
+      final category = repo.create(Entity.categories, {'name': 'Ăn uống'});
+      await repo.save(category);
+      await repo.save(
+        repo.create(Entity.tags, {'name': 'caphe', 'category_id': category.id}),
+      );
       inbox.failFinish = true;
       await tester.pumpWidget(
         wrap(
@@ -121,7 +153,9 @@ void main() {
               onPressed: () => showDialog<void>(
                 context: context,
                 builder: (_) => TransactionForm(
-                  record: draft.toTransaction(repo, accountId: account.id),
+                  record: draft
+                      .toTransaction(repo, accountId: account.id)
+                      .patch({'category_id': category.id}),
                   bankDraft: draft,
                 ),
               ),
@@ -143,7 +177,8 @@ void main() {
         find.widgetWithText(TextField, 'Description'),
         'Coffee',
       );
-      await tester.enterText(find.widgetWithText(TextField, 'Tags'), '#coffee');
+      await tester.ensureVisible(find.widgetWithText(FilterChip, '#caphe'));
+      await tester.tap(find.widgetWithText(FilterChip, '#caphe'));
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(inbox.rows, hasLength(1));

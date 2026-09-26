@@ -1,4 +1,6 @@
 import 'installments.dart';
+import '../debts/debt_service.dart';
+import '../catalog/catalog_screen.dart';
 import '../bank_import/bank_draft.dart';
 import '../bank_import/bank_confirmation.dart';
 import '../bank_import/bank_draft_repository.dart';
@@ -11,6 +13,7 @@ import '../../app/widgets.dart';
 import '../../core/database/record.dart';
 import '../../core/utils/money.dart';
 import 'tag_suggestions.dart';
+import '../../core/utils/tag_name.dart';
 
 Future<void> showTransactionForm(BuildContext context, {Record? record}) =>
     showDialog<void>(
@@ -36,7 +39,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
   int installmentMonths = 6, installmentDay = 24;
   Record? installmentTemplate;
   String? reviewCurrency;
-  String? account, from, to, category, error;
+  String? account, from, to, category, error, borrower;
   DateTime occurred = DateTime.now();
   final selectedTags = <String>{};
   bool busy = false, initialized = false;
@@ -67,7 +70,12 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
     super.dispose();
   }
 
-  Future<void> save(List<Record> accounts, List<Record> tags) async {
+  Future<void> save(
+    List<Record> accounts,
+    List<Record> tags, {
+    bool lending = false,
+    List<Record> people = const [],
+  }) async {
     setState(() {
       busy = true;
       error = null;
@@ -103,19 +111,34 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         final names = {
           ...selectedTags,
           ...tagInput.text
-              .split(RegExp(r'[,\s]+'))
-              .map(
-                (s) => s.replaceFirst(RegExp(r'^#'), '').trim().toLowerCase(),
-              )
+              .split(RegExp(r'[,#]+'))
+              .map(normalizeTagName)
               .where((s) => s.isNotEmpty),
         };
         for (final name in names) {
+          final existingTag = tags
+              .where((t) => t.text('name').toLowerCase() == name)
+              .firstOrNull;
+          if (!selectedTags.contains(name) &&
+              existingTag != null &&
+              existingTag.text('category_id') != category) {
+            throw const FormatException('This tag belongs to another category');
+          }
           chosen.add(
             tags
                     .where((t) => t.text('name').toLowerCase() == name)
                     .firstOrNull ??
-                repository.create(Entity.tags, {'name': name}),
+                repository.create(Entity.tags, {
+                  'name': name,
+                  'category_id': category,
+                }),
           );
+        }
+        final person = lending
+            ? people.where((p) => p.id == borrower).firstOrNull
+            : null;
+        if (lending && person == null) {
+          throw const FormatException('Create or select a person first');
         }
         if (widget.bankDraft != null) {
           await BankConfirmation.save(
@@ -123,7 +146,12 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             widget.bankDraft!,
             transaction,
             chosen,
+            borrower: person,
           );
+        } else if (lending) {
+          await DebtService(
+            repository,
+          ).saveLendingTransaction(transaction, person!, chosen);
         } else if (installments && type == 'expense') {
           installmentTemplate ??= transaction;
           await Installments.save(
@@ -185,6 +213,8 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               (c.text('type') == type || c.text('type') == 'both'),
         )
         .toList();
+    final peopleState = ref.watch(recordsProvider(Entity.people));
+    final people = peopleState.value ?? <Record>[];
     final tagState = ref.watch(recordsProvider(Entity.tags));
     final links = ref.watch(recordsProvider(Entity.transactionTags));
     final tags = tagSuggestions(tagState.value ?? [], links.value ?? []);
@@ -225,6 +255,11 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         });
       }
     }
+    final isLending =
+        type == 'expense' &&
+        categories.any(
+          (c) => c.id == category && c.text('behavior') == 'lending',
+        );
     return FormDialog(
       title: widget.bankDraft != null
           ? context.tr('Confirm bank transaction')
@@ -232,16 +267,17 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           ? context.tr('New transaction')
           : context.tr('Edit transaction'),
       busy: busy,
-      saveEnabled: ready,
+      saveEnabled: ready && (!isLending || peopleState.hasValue),
       error:
           error ??
           (accountState.hasError ||
                   categoryState.hasError ||
                   tagState.hasError ||
-                  links.hasError
+                  links.hasError ||
+                  (isLending && peopleState.hasError)
               ? context.tr("Could not load choices. Close this form and retry.")
               : null),
-      save: () => save(accounts, tags),
+      save: () => save(accounts, tags, lending: isLending, people: people),
       children: [
         if (widget.bankDraft != null) ...[
           Text(
@@ -302,9 +338,11 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           onSelectionChanged: (v) => setState(() {
             type = v.isEmpty ? 'unknown' : v.first;
             category = null;
+            selectedTags.clear();
+            tagInput.clear();
           }),
         ),
-        if (widget.record == null && type == 'expense') ...[
+        if (widget.record == null && type == 'expense' && !isLending) ...[
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(context.tr('Installments')),
@@ -370,9 +408,32 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             label: context.tr('Category'),
             value: category,
             records: categories,
-            onChanged: (v) => setState(() => category = v),
+            onChanged: (v) => setState(() {
+              category = v;
+              installments = false;
+              selectedTags.clear();
+              tagInput.clear();
+            }),
             optional: true,
           ),
+        if (isLending) ...[
+          Text(
+            context.tr(
+              'This creates a linked debt and is excluded from spending.',
+            ),
+          ),
+          RecordPicker(
+            label: context.tr('Borrower'),
+            value: borrower,
+            records: people,
+            onChanged: (v) => setState(() => borrower = v),
+          ),
+          TextButton.icon(
+            onPressed: () => showCatalogForm(context, Entity.people),
+            icon: const Icon(Icons.person_add_alt),
+            label: Text(context.tr('Add person')),
+          ),
+        ],
         RecordPicker(
           key: ValueKey('account-$type'),
           label: type == 'transfer'
@@ -401,23 +462,18 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               'Add an account from More → Accounts before recording a transaction.',
             ),
           ),
-        TextField(
-          controller: tagInput,
-          decoration: InputDecoration(
-            labelText: context.tr('Tags'),
-            hintText: '#coffee #friends',
-          ),
-          onChanged: (_) => setState(() {}),
-        ),
+        Text(context.tr('Tags')),
+        if (category == null)
+          Text(context.tr('Choose a category to see its tags')),
         Wrap(
           spacing: 6,
+          runSpacing: 4,
           children: tags
               .where(
                 (t) =>
-                    tagInput.text.isEmpty ||
-                    t.text('name').contains(tagInput.text.replaceAll('#', '')),
+                    tagsForCategory([t], category).isNotEmpty ||
+                    selectedTags.contains(t.text('name').toLowerCase()),
               )
-              .take(8)
               .map(
                 (t) => FilterChip(
                   label: Text('#${t.text('name')}'),
@@ -433,6 +489,14 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               )
               .toList(),
         ),
+        if (category != null)
+          TextField(
+            controller: tagInput,
+            decoration: InputDecoration(
+              labelText: context.tr('Add tags (optional)'),
+              hintText: '#caphe, #antrua',
+            ),
+          ),
         ExpansionTile(
           title: Text(context.tr('Date & note')),
           tilePadding: EdgeInsets.zero,

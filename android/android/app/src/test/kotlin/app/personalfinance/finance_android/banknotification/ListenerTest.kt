@@ -18,6 +18,35 @@ import java.util.concurrent.TimeUnit
 @Config(sdk = [35])
 class ListenerTest {
     private fun <T> native(block: () -> T): T = BankInbox.executor.submit<T> { block() }.get(10, TimeUnit.SECONDS)
+    @Test fun reconnectsAfterDisconnectAndRecoversVisibleBankNotifications() {
+        val context = RuntimeEnvironment.getApplication()
+        val controller = Robolectric.buildService(BankNotificationListenerService::class.java).create()
+        val service = controller.get()
+        val component = android.content.ComponentName(context, BankNotificationListenerService::class.java)
+        android.provider.Settings.Secure.putString(context.contentResolver, "enabled_notification_listeners", component.flattenToString())
+        native { BankInbox.setOwner(context, "reconnect-user"); BankInbox.preferences(context).edit().putBoolean("capture", true).commit() }
+        try {
+            val shadow = org.robolectric.Shadows.shadowOf(service)
+            val n = Notification.Builder(context, "test").setSmallIcon(R.mipmap.ic_launcher)
+                .setContentText("GD: +5,000VND 21/09/26 09:00|SD: 100,000VND").build()
+            shadow.addActiveNotification("com.mbmobile", 91, n)
+            shadow.addActiveNotification("com.unrelated.chat", 92, n)
+            val before = org.robolectric.shadows.ShadowNotificationListenerService.getRebindRequestCount()
+            service.onListenerDisconnected()
+            assertEquals(before + 1, org.robolectric.shadows.ShadowNotificationListenerService.getRebindRequestCount())
+            service.onListenerConnected()
+            assertEquals(1, native { BankDraftDatabase.get(context).drafts().count("reconnect-user") })
+            service.onListenerConnected()
+            assertEquals(1, native { BankDraftDatabase.get(context).drafts().count("reconnect-user") })
+            native { BankInbox.preferences(context).edit().putBoolean("capture", false).commit() }
+            val disabled = org.robolectric.shadows.ShadowNotificationListenerService.getRebindRequestCount()
+            service.onListenerDisconnected()
+            assertEquals(disabled, org.robolectric.shadows.ShadowNotificationListenerService.getRebindRequestCount())
+        } finally {
+            native { BankInbox.setOwner(context, null) }
+            controller.destroy()
+        }
+    }
     @Test fun realListenerPersistsWithoutFlutterAndStopsOnLogout() {
         val context = RuntimeEnvironment.getApplication()
         val service = Robolectric.buildService(BankNotificationListenerService::class.java).create()

@@ -1,3 +1,6 @@
+import 'category_chart.dart';
+import 'daily_spending.dart';
+import 'spending_chart.dart';
 import '../../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -110,10 +113,17 @@ class DashboardScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 24),
+            SpendingChart(
+              days: dailySpending(rows, month, currency),
+              month: month,
+              currency: currency,
+            ),
+            const SizedBox(height: 24),
             Text(
               context.tr('Expense by category'),
               style: Theme.of(context).textTheme.titleLarge,
             ),
+            CategoryChart(entries: categoryTotals, currency: currency),
             if (categoryTotals.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -127,27 +137,38 @@ class DashboardScreen extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(entry.key),
+                subtitle: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: LinearProgressIndicator(
+                    value: totals.expense == 0
+                        ? 0
+                        : entry.value / totals.expense,
+                  ),
+                ),
                 trailing: Text(Money.format(entry.value, currency)),
               ),
             const SizedBox(height: 20),
             Text(
-              context.tr('Top tags'),
+              context.tr('Expense by tag'),
               style: Theme.of(context).textTheme.titleLarge,
             ),
             Text(context.tr('A transaction may appear under several tags.')),
-            Wrap(
-              spacing: 8,
-              children: tagTotals
-                  .take(8)
-                  .map(
-                    (e) => Chip(
-                      label: Text(
-                        '#${e.key} · ${Money.format(e.value, currency)}',
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
+            if (tagTotals.isEmpty)
+              Text(context.tr('No tagged expenses this month.')),
+            for (final entry in tagTotals)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('#${entry.key}'),
+                subtitle: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: LinearProgressIndicator(
+                    value: totals.expense == 0
+                        ? 0
+                        : (entry.value / totals.expense).clamp(0, 1),
+                  ),
+                ),
+                trailing: Text(Money.format(entry.value, currency)),
+              ),
             const SizedBox(height: 24),
             Wrap(
               spacing: 8,

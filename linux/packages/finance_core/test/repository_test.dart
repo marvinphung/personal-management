@@ -181,7 +181,14 @@ void main() {
   test(
     'clear private removes records, outbox and synchronization metadata',
     () async {
-      await repo.save(repo.create(Entity.tags, {'name': 'university'}));
+      final category = repo.create(Entity.categories, {'name': 'Học tập'});
+      await repo.save(category);
+      await repo.save(
+        repo.create(Entity.tags, {
+          'name': 'university',
+          'category_id': category.id,
+        }),
+      );
       await db.setMetadata('owner', 'user');
       await db.clearPrivate();
       expect(await db.list(Entity.tags), isEmpty);

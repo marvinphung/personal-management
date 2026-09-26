@@ -12,3 +12,10 @@ List<Record> tagSuggestions(List<Record> tags, List<Record> links) {
     return recent != 0 ? recent : a.text('name').compareTo(b.text('name'));
   });
 }
+
+List<Record> tagsForCategory(List<Record> tags, String? category) =>
+    category == null
+    ? []
+    : tags
+          .where((t) => !t.deleted && t.text('category_id') == category)
+          .toList();

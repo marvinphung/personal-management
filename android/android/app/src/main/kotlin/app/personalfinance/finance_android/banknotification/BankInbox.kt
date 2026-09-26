@@ -16,6 +16,12 @@ object BankInbox {
     var onChanged: (() -> Unit)? = null
     fun preferences(context: Context) = context.getSharedPreferences("bank_import", Context.MODE_PRIVATE)
     fun owner(context: Context): String? = preferences(context).getString("owner", null)
+    fun notifyStatus() { main.post { onChanged?.invoke() } }
+    fun recordOutcome(context: Context, outcome: String) {
+        preferences(context).edit().putLong("last_bank_at", System.currentTimeMillis())
+            .putString("last_outcome", outcome).apply()
+        notifyStatus()
+    }
     fun changed(context: Context) {
         BankInboxWidget.update(context)
         main.post { onChanged?.invoke() }
@@ -33,7 +39,10 @@ object BankInbox {
         val user = owner(context) ?: return false
         if (!preferences(context).getBoolean("capture", false)) return false
         val parsed = ParserRouter.parse(source.code, notification.packageName, notification.text, notification.postedAt)
-        if (!parsed.canCreateDraft) return false
+        if (!parsed.canCreateDraft) {
+            recordOutcome(context, if (parsed.status == Status.failed) "failed" else "unsupported")
+            return false
+        }
         val now = System.currentTimeMillis()
         val payload = parsed.toMap() + mapOf("sourceAppLabel" to source.name)
         // No raw text is persisted: normalized suggestions are sufficient for review.
@@ -51,6 +60,7 @@ object BankInbox {
                 check(prefs.edit().putString(key, snapshot.toString()).commit())
             }
         }
+        recordOutcome(context, if (inserted) "created" else "duplicate")
         if (inserted) changed(context)
         return inserted
     }

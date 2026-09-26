@@ -81,6 +81,7 @@ class Record {
       'is_archived': false,
     },
     Entity.categories => {
+      'behavior': 'normal',
       'type': 'expense',
       'icon': null,
       'is_default': false,

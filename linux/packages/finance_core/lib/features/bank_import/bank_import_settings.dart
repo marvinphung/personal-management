@@ -79,6 +79,65 @@ class _BankImportSettingsState extends ConsumerState<BankImportSettings> {
               context.tr(data['access'] == true ? 'Enabled' : 'Disabled'),
             ),
           ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(context.tr('Notification service')),
+            subtitle: Text(
+              context.tr(
+                data['capture'] != true
+                    ? 'Automatic import is off'
+                    : data['connected'] == true
+                    ? 'Connected'
+                    : 'Disconnected',
+              ),
+            ),
+          ),
+          if (data['capture'] == true &&
+              data['access'] == true &&
+              data['connected'] != true)
+            OutlinedButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: Text(context.tr('Reconnect notification service')),
+              onPressed: busy
+                  ? null
+                  : () async {
+                      setState(() => busy = true);
+                      try {
+                        await ref.read(bankDraftRepositoryProvider).reconnect();
+                        ref.invalidate(bankSettingsProvider);
+                      } catch (_) {
+                        if (context.mounted) {
+                          message(
+                            context,
+                            context.tr(
+                              'Could not reconnect. Toggle Notification Access off and on.',
+                            ),
+                          );
+                        }
+                      } finally {
+                        if (mounted) setState(() => busy = false);
+                      }
+                    },
+            ),
+          Text(
+            context.tr(
+              'Developer mode is not required. If disconnected, reconnect or toggle Notification Access off and on.',
+            ),
+          ),
+          if ((data['lastBankAt'] as num? ?? 0) > 0)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.tr('Last bank notification')),
+              subtitle: Text(
+                '${context.dateLabel(DateTime.fromMillisecondsSinceEpoch((data['lastBankAt'] as num).toInt()), time: true)} · ${context.tr(switch (data['lastOutcome']) {
+                  'created' => 'Draft created',
+                  'duplicate' => 'Duplicate ignored',
+                  'failed' => 'Failed bank transaction ignored',
+                  'unsupported' => 'No supported transaction detected',
+                  _ => 'Notification processing error',
+                })}',
+              ),
+            ),
           if (data['access'] != true)
             Text(
               context.tr(
@@ -199,7 +258,13 @@ class _BankParserScreenState extends ConsumerState<BankParserScreen> {
             DropdownButton<String>(
               value: bank,
               items: [
-                for (final code in ['mbbank', 'vietinbank', 'bidv', 'techcombank', 'generic'])
+                for (final code in [
+                  'mbbank',
+                  'vietinbank',
+                  'bidv',
+                  'techcombank',
+                  'generic',
+                ])
                   DropdownMenuItem(value: code, child: Text(code)),
               ],
               onChanged: (v) => setState(() => bank = v!),

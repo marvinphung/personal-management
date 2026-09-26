@@ -1,7 +1,6 @@
 package app.personalfinance.finance_android.banknotification.bridge
 
 import android.app.Activity
-import android.content.ComponentName
 import android.content.Intent
 import android.provider.Settings
 import android.os.Handler
@@ -38,13 +37,15 @@ class BankDraftFlutterBridge(private val activity: Activity, messenger: BinaryMe
                             return user
                         }
                         val response: Any? = when (call.method) {
-                            "setOwner" -> { BankInbox.setOwner(activity, args["owner"] as? String); null }
+                            "setOwner" -> { BankInbox.setOwner(activity, args["owner"] as? String); ListenerConnection.ensureBound(activity); null }
+                            "reconnect" -> { owner(); ListenerConnection.ensureBound(activity, force = true); null }
                             "getSettings" -> {
                                 owner()
-                                val component = ComponentName(activity, BankNotificationListenerService::class.java)
-                                val enabled = Settings.Secure.getString(activity.contentResolver, "enabled_notification_listeners")
-                                    ?.split(':')?.any { ComponentName.unflattenFromString(it) == component } == true
-                                mapOf("access" to enabled, "capture" to prefs.getBoolean("capture", false),
+                                ListenerConnection.ensureBound(activity)
+                                mapOf("access" to ListenerConnection.hasAccess(activity), "capture" to prefs.getBoolean("capture", false),
+                                    "connected" to ListenerConnection.connected,
+                                    "lastBankAt" to prefs.getLong("last_bank_at", 0L),
+                                    "lastOutcome" to prefs.getString("last_outcome", null),
                                     "sources" to BankSourceRegistry.sources.map { source -> mapOf(
                                         "code" to source.code, "name" to source.name,
                                         "enabled" to prefs.getBoolean("enabled.${source.code}", true),
@@ -54,7 +55,10 @@ class BankDraftFlutterBridge(private val activity: Activity, messenger: BinaryMe
                             "configure" -> {
                                 owner()
                                 val edit = prefs.edit()
-                                (args["capture"] as? Boolean)?.let { edit.putBoolean("capture", it) }
+                                (args["capture"] as? Boolean)?.let {
+                                    if (it && !prefs.getBoolean("capture", false)) edit.putLong("capture_enabled_at", System.currentTimeMillis())
+                                    edit.putBoolean("capture", it)
+                                }
                                 (args["language"] as? String)?.let { require(it in listOf("en", "vi")); edit.putString("language", it) }
                                 (args["bank"] as? String)?.let { bank ->
                                     require(BankSourceRegistry.sources.any { it.code == bank })
@@ -62,13 +66,14 @@ class BankDraftFlutterBridge(private val activity: Activity, messenger: BinaryMe
                                     if (args.containsKey("account")) edit.putString("account.$bank", args["account"] as? String)
                                     (args["package"] as? String)?.let { require(Regex("[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+").matches(it)); edit.putString("package.$bank", it) }
                                 }
-                                check(edit.commit()); BankInbox.changed(activity); null
+                                check(edit.commit()); ListenerConnection.ensureBound(activity); BankInbox.changed(activity); null
                             }
                             "pending" -> dao.pending(owner(), offset = ((args["offset"] as? Number)?.toInt() ?: 0).coerceAtLeast(0)).map { row ->
                                 jsonMap(JSONObject(row.payload!!)) + mapOf("id" to row.id, "fingerprint" to row.fingerprint, "owner" to row.owner)
                             }
                             "balances" -> {
                                 owner()
+                                ListenerConnection.ensureBound(activity)
                                 prefs.all.filterKeys { it.startsWith("balance.") }.values.map { jsonMap(JSONObject(it as String)) }
                             }
                             "count" -> dao.count(owner())

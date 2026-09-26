@@ -4,6 +4,7 @@ import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
 import '../utils/ledger.dart';
 import '../utils/money.dart';
+import '../utils/tag_name.dart';
 import 'local_database.dart';
 import 'record.dart';
 
@@ -13,7 +14,13 @@ class FinanceRepository {
   final Lock lock = Lock();
   FinanceRepository(this.db, this.userId);
   Record create(Entity entity, Map<String, dynamic> data, {String? id}) =>
-      Record.create(entity, userId, data, id: id);
+      Record.create(entity, userId, {
+        ...data,
+        if (entity == Entity.categories &&
+            data['name'] == 'Cho vay' &&
+            (data['type'] ?? 'expense') == 'expense')
+          'behavior': 'lending',
+      }, id: id);
   Future<void> save(Record record) => saveBatch([record]);
   Future<void> saveBatch(List<Record> records, {String? importKey}) =>
       lock.synchronized(() => _saveBatch(records, importKey: importKey));
@@ -166,6 +173,16 @@ class FinanceRepository {
         throw const FormatException('This name already exists');
       }
     }
+    if (row.entity == Entity.tags) {
+      if (row.text('category_id').isEmpty) {
+        throw const FormatException('Choose a category for this tag');
+      }
+      await related(Entity.categories, row.text('category_id'));
+      if (normalizeTagName(row.text('name')) != row.text('name') ||
+          row.text('name').length > 80) {
+        throw const FormatException('Use an unaccented tag without spaces');
+      }
+    }
     if (row.entity == Entity.transactions) {
       final type = row.text('type');
       if (row.data['installment_group'] != null &&
@@ -201,6 +218,25 @@ class FinanceRepository {
       }
       if (row.data['category_id'] != null) {
         final c = await related(Entity.categories, row.text('category_id'));
+        if (c.text('behavior') == 'lending') {
+          final debts = [
+            ...batch.where((r) => r.entity == Entity.debts),
+            ...await db.list(Entity.debts),
+          ];
+          if (row.text('purpose') != 'debt_disbursement' ||
+              !debts.any(
+                (d) =>
+                    !d.deleted &&
+                    d.text('linked_transaction_id') == row.id &&
+                    d.text('direction') == 'lent' &&
+                    d.money('principal_amount') == row.money('amount') &&
+                    d.text('currency') == row.text('currency'),
+              )) {
+            throw const FormatException(
+              'Choose a borrower to create a linked debt',
+            );
+          }
+        }
         if (c.text('type') != 'both' && c.text('type') != type) {
           throw const FormatException('Choose a matching category');
         }
@@ -236,10 +272,11 @@ class FinanceRepository {
     Record transaction,
     List<Record> tags, {
     String? importKey,
+    List<Record> relatedRecords = const [],
   }) async {
     final links = await db.list(Entity.transactionTags);
     final now = DateTime.now().toUtc().toIso8601String();
-    final rows = <Record>[transaction];
+    final rows = <Record>[transaction, ...relatedRecords];
     for (final tag in tags) {
       if (await db.get(Entity.tags, tag.id) == null) rows.insert(0, tag);
     }

@@ -1,5 +1,47 @@
 // English messages are stable presentation keys, never database values.
 const vietnamese = <String, String>{
+  'Notification service': 'Dịch vụ đọc thông báo',
+  'Automatic import is off': 'Đang tắt tự động nhận giao dịch',
+  'Connected': 'Đã kết nối',
+  'Disconnected': 'Chưa kết nối',
+  'Reconnect notification service': 'Kết nối lại dịch vụ',
+  'Could not reconnect. Toggle Notification Access off and on.':
+      'Chưa kết nối được. Hãy tắt rồi bật lại quyền Truy cập thông báo.',
+  'Developer mode is not required. If disconnected, reconnect or toggle Notification Access off and on.':
+      'Không cần bật Chế độ nhà phát triển. Nếu chưa kết nối, hãy thử kết nối lại hoặc tắt rồi bật lại quyền Truy cập thông báo.',
+  'Last bank notification': 'Lần gần nhất nhận thông báo ngân hàng',
+  'Draft created': 'Đã tạo giao dịch chờ duyệt',
+  'Duplicate ignored': 'Đã bỏ qua thông báo trùng',
+  'Failed bank transaction ignored': 'Đã bỏ qua giao dịch ngân hàng thất bại',
+  'No supported transaction detected': 'Chưa nhận diện được giao dịch hợp lệ',
+  'Notification processing error': 'Lỗi xử lý thông báo',
+
+  'Open linked debt': 'Mở công nợ liên kết',
+  'Borrower': 'Người vay',
+  'This creates a linked debt and is excluded from spending.':
+      'Tạo khoản cho vay trong Công nợ, không tính vào chi tiêu.',
+  'Choose a borrower to create a linked debt':
+      'Chọn người vay để tạo khoản công nợ liên kết',
+  'Lending requires a single expense':
+      'Cho vay phải là một giao dịch tiền ra, không phải trả góp',
+
+  'Choose a category to see its tags': 'Chọn danh mục để xem các tag có sẵn',
+  'Add tags (optional)': 'Thêm tag mới (không bắt buộc)',
+  'Choose a category for this tag': 'Chọn danh mục cho tag này',
+  'This tag belongs to another category':
+      'Tag này đã thuộc danh mục khác. Hãy đổi danh mục của tag trong phần quản lý tag.',
+  'Use an unaccented tag without spaces':
+      'Tag phải viết liền không dấu, tối đa 80 ký tự',
+
+  'Daily spending': 'Chi tiêu từng ngày',
+  'Highest day': 'Ngày chi nhiều nhất',
+  'Tap a day to see its spending. Swipe to see all days.':
+      'Chạm vào ngày để xem số tiền. Vuốt để xem hết tháng.',
+  'No expenses this month.': 'Chưa có chi tiêu trong tháng này.',
+  'Expense by tag': 'Chi tiêu theo tag',
+  'No tagged expenses this month.':
+      'Chưa có khoản chi gắn tag trong tháng này.',
+
   'Bank balance at {date}: {amount}': 'Số dư ngân hàng lúc {date}: {amount}',
   'Installments': 'Trả góp',
   'Monthly payment': 'Số tiền trả mỗi tháng',
