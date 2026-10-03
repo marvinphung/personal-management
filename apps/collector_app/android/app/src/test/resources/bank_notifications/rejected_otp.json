@@ -1,0 +1,8 @@
+{
+  "packageName": "com.vnpay.bidv",
+  "title": "BIDV SmartBanking",
+  "text": "Ma OTP xac thuc giao dich cua quy khach la 123456. Khong chia se ma nay cho bat ky ai.",
+  "postTime": 1790950000000,
+  "shouldReject": true,
+  "reason": "OTP"
+}

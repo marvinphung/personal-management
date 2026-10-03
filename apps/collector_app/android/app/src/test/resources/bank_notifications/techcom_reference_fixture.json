@@ -1,0 +1,15 @@
+{
+  "packageName": "vn.com.techcombank.bb.app",
+  "title": "Techcombank Mobile",
+  "text": "TK 19020030040050: +250,000 VND vao 02/10/2026 16:20. ND: Chuyen khoan noi bo",
+  "postTime": 1790950000000,
+  "isReferenceFixture": true,
+  "expected": {
+    "bankCode": "techcombank",
+    "ownerAccount": "19020030040050",
+    "direction": "income",
+    "amountVnd": 250000,
+    "occurredAt": "2026-10-02T09:20:00Z",
+    "description": "Chuyen khoan noi bo"
+  }
+}

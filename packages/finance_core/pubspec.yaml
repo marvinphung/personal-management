@@ -1,0 +1,29 @@
+name: finance_core
+description: Shared offline-first finance domain, data and adaptive Flutter UI.
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  supabase_flutter: ^2.17.2
+  drift: ^2.30.0
+  sqlite3: ^3.1.0
+  flutter_riverpod: ^3.0.0
+  go_router: ^17.0.0
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  uuid: ^4.5.2
+  intl: ^0.20.2
+  shared_preferences: ^2.5.4
+  flutter_secure_storage: ^10.0.0
+  synchronized: ^3.4.0
+  api_client:
+    path: ../api_client
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

@@ -1,0 +1,14 @@
+{
+  "packageName": "com.vietinbank.ipay",
+  "title": "VietinBank iPay",
+  "text": "TK: 102030405060 | GD: +500,000VND 02/10/2026 14:30 | SDC: 5,420,000VND | ND: Luong thang 9",
+  "postTime": 1790950000000,
+  "expected": {
+    "bankCode": "vietinbank",
+    "ownerAccount": "102030405060",
+    "direction": "income",
+    "amountVnd": 500000,
+    "occurredAt": "2026-10-02T07:30:00Z",
+    "description": "Luong thang 9"
+  }
+}

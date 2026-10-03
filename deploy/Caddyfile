@@ -1,0 +1,33 @@
+{
+    email {$ACME_EMAIL:admin@quanlytao.app}
+}
+
+{$SERVER_DOMAIN:localhost} {
+    encode gzip zstd
+
+    # Health check passthrough
+    handle /v1/health/* {
+        reverse_proxy backend:8000
+    }
+
+    # API endpoints
+    handle /v1/* {
+        reverse_proxy backend:8000
+    }
+
+    # API Documentation
+    handle /docs* {
+        reverse_proxy backend:8000
+    }
+    handle /redoc* {
+        reverse_proxy backend:8000
+    }
+    handle /openapi.json {
+        reverse_proxy backend:8000
+    }
+
+    # Root fallback
+    handle {
+        respond "Quản lý Tao API Gateway" 200
+    }
+}

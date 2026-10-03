@@ -1,0 +1,14 @@
+{
+  "packageName": "com.vnpay.bidv",
+  "title": "BIDV SmartBanking",
+  "text": "Tài khoản thanh toán: 1234567890. Số tiền GD: +720,000 VND. Thời gian giao dịch: 22:24:40 02/10/2026. Số dư: 15,920,000 VND. Nội dung: Tran Thi C chuyen tien",
+  "postTime": 1790955000000,
+  "expected": {
+    "bankCode": "bidv",
+    "ownerAccount": "1234567890",
+    "direction": "income",
+    "amountVnd": 720000,
+    "occurredAt": "2026-10-02T15:24:40Z",
+    "description": "Tran Thi C chuyen tien"
+  }
+}

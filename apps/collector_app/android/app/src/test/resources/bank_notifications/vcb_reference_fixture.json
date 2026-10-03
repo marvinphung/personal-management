@@ -1,0 +1,15 @@
+{
+  "packageName": "com.VCB",
+  "title": "VCB Digibank",
+  "text": "Số dư TK VCB 0011000123456 +500,000 VND lúc 02-10-2026 10:15:30. Số dư hiện tại 12,000,000 VND. Ref: VCB12345. ND: Tra no",
+  "postTime": 1790930000000,
+  "isReferenceFixture": true,
+  "expected": {
+    "bankCode": "vietcombank",
+    "ownerAccount": "0011000123456",
+    "direction": "income",
+    "amountVnd": 500000,
+    "occurredAt": "2026-10-02T03:15:30Z",
+    "description": "Tra no"
+  }
+}

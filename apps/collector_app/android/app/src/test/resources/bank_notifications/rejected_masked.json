@@ -1,0 +1,8 @@
+{
+  "packageName": "com.vnpay.bidv",
+  "title": "BIDV SmartBanking",
+  "text": "Tài khoản thanh toán: 123***789. Số tiền GD: +50,000 VND. Thời gian giao dịch: 22:20:15 02/10/2026.",
+  "postTime": 1790950000000,
+  "shouldReject": true,
+  "reason": "MASKED_ACCOUNT"
+}
