@@ -184,6 +184,7 @@ python3 tool/check_mobile_secrets.py
 - [Server Operations & Deployment](docs/runbooks/server.md)
 - [Collector Phone Setup & Handover](docs/runbooks/collector.md)
 - [Android Collector/Admin remote server test](docs/runbooks/android-admin-server-test.md)
+- [Collector enrollment API contract](docs/api/collector-enrollment.md)
 - [Backup, Restore & Secrets Rotation](docs/runbooks/backup.md)
 - [Bank Notification Fixtures & Parsers](docs/runbooks/bank-fixtures.md)
 - [iOS Simulator & Widget Verification](docs/runbooks/ios-simulator.md)

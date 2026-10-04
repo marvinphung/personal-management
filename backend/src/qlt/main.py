@@ -147,6 +147,7 @@ async def health_ready():
 
 # Include routers
 from qlt.admin.banks import router as admin_banks_router
+from qlt.admin.collectors import router as admin_collectors_router
 from qlt.admin.users import router as admin_users_router
 from qlt.auth.routes import router as auth_router
 from qlt.catalog.banks import router as banks_router
@@ -165,6 +166,7 @@ app.include_router(auth_router)
 app.include_router(admin_users_router)
 app.include_router(banks_router)
 app.include_router(admin_banks_router)
+app.include_router(admin_collectors_router)
 app.include_router(ingest_router)
 app.include_router(categories_router)
 app.include_router(ledger_router)
@@ -175,7 +177,6 @@ app.include_router(wallets_router)
 app.include_router(widgets_router)
 app.include_router(realtime_router)
 app.include_router(push_router)
-
 
 
 
