@@ -1,13 +1,16 @@
 from functools import lru_cache
 from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(Path(__file__).resolve().parents[2].parent / ".env",
-                  Path(__file__).resolve().parents[2] / ".env"),
+        env_file=(
+            Path(__file__).resolve().parents[2].parent / ".env",
+            Path(__file__).resolve().parents[2] / ".env",
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -36,6 +39,9 @@ class Settings(BaseSettings):
     nats_reconnect_time_wait_seconds: float = Field(default=1.0)
     nats_max_reconnect_attempts: int = Field(default=60)
     nats_duplicate_window_seconds: int = Field(default=86400)  # 24h
+    nats_host: str = Field(default="127.0.0.1")
+    nats_monitor_listen: str = Field(default="127.0.0.1:8222")
+    nats_store_dir: str | None = Field(default=None)
 
     # Coordination & Workers
     outbox_worker_poll_interval_seconds: float = Field(default=1.0)
@@ -55,6 +61,10 @@ class Settings(BaseSettings):
 
     session_lifetime_days: int = Field(default=30)
     widget_token_lifetime_days: int = Field(default=90)
+
+    # Optional local/demo seed account. Keep real credentials out of committed files.
+    demo_user_username: str = Field(default="demo")
+    demo_user_password: str | None = Field(default=None)
 
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
@@ -100,6 +110,7 @@ class Settings(BaseSettings):
                 f"Destructive broker operation rejected: stream name does not contain TEST ({stream_name})"
             )
         from urllib.parse import urlparse
+
         if urlparse(self.nats_url).hostname not in ("localhost", "127.0.0.1", "::1"):
             raise RuntimeError("Backend tests require a local isolated NATS broker")
 

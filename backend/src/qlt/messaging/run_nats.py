@@ -1,4 +1,5 @@
 """Native launchd entry point: load private .env without shell-evaluating secrets."""
+
 import os
 import shutil
 from pathlib import Path
@@ -15,11 +16,17 @@ def main():
         raise RuntimeError("nats-server not found on launchd PATH")
     root = Path(__file__).resolve().parents[3].parent
     # src/qlt/messaging/run_nats.py -> backend -> repository root
-    store = root / "data" / "jetstream"
+    configured_store = getattr(settings, "nats_store_dir", None)
+    store = Path(configured_store) if configured_store else root / "data" / "jetstream"
     store.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
-    env.update(NATS_HOST="127.0.0.1", NATS_MONITOR_LISTEN="127.0.0.1:8222",
-        NATS_STORE_DIR=str(store), NATS_USER=settings.nats_user, NATS_PASSWORD=settings.nats_password)
+    env.update(
+        NATS_HOST=getattr(settings, "nats_host", "127.0.0.1"),
+        NATS_MONITOR_LISTEN=getattr(settings, "nats_monitor_listen", "127.0.0.1:8222"),
+        NATS_STORE_DIR=str(store),
+        NATS_USER=settings.nats_user,
+        NATS_PASSWORD=settings.nats_password,
+    )
     os.execvpe(binary, [binary, "-c", str(root / "deploy/nats/nats.conf")], env)
 
 

@@ -41,6 +41,7 @@ build/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+data/
 *.jks
 *.keystore
 __pycache__/

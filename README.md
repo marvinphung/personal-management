@@ -187,3 +187,5 @@ python3 tool/check_mobile_secrets.py
 - [Bank Notification Fixtures & Parsers](docs/runbooks/bank-fixtures.md)
 - [iOS Simulator & Widget Verification](docs/runbooks/ios-simulator.md)
 - [Acceptance & Validation Rehearsal](docs/runbooks/acceptance.md)
+- [Local Development with PostgreSQL 17](docs/runbooks/local-development.md)
+- [Android Remote Testing against the Mac mini](docs/runbooks/android-remote-local-server.md)

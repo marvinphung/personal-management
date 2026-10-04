@@ -1,0 +1,8 @@
+{
+	email admin@quanlytao.app
+}
+
+xn--qun-l-tao-49a0064f.id.vn {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:8000
+}
