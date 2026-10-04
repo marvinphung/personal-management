@@ -41,7 +41,7 @@ class WidgetWorker(
                     200 -> {
                         val body = response.body?.string() ?: return Result.retry()
                         val json = JSONObject(body)
-                        val count = json.optInt("count", 0)
+                        val count = if (json.has("count")) json.getInt("count") else json.optInt("pending_count", 0)
                         WidgetCache.setPendingCount(applicationContext, count)
                         BankInboxWidget.update(applicationContext)
                         Result.success()

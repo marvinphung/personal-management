@@ -47,12 +47,15 @@ def get_collector_registry(active_collector: dict = Depends(get_active_collector
     }
 
 
+from qlt.messaging.ingestion import CollectorEventItem, process_collector_events_async
+
+
 @router.post("/events")
-def ingest_events(
+async def ingest_events(
     events: list[CollectorEventItem],
     active_collector: dict = Depends(get_active_collector),
 ):
-    results = process_collector_events(events, active_collector)
+    results = await process_collector_events_async(events, active_collector)
     return results
 
 

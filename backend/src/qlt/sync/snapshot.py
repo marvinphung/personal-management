@@ -112,34 +112,7 @@ def get_user_snapshot(user_id: uuid.UUID, known_revision: int | None = None) -> 
                 for r in cur.fetchall()
             ]
 
-            # 5. Pending bank events
-            cur.execute(
-                f"""
-                SELECT id, bank_code, owner_account_snapshot, amount_vnd, direction,
-                       occurred_at, time_source, received_at, bank_description, version
-                FROM {schema}.pending_bank_events
-                WHERE user_id = %s
-                ORDER BY occurred_at DESC, id DESC;
-                """,
-                (u_id,),
-            )
-            pending_events = [
-                {
-                    "id": str(r["id"]),
-                    "bank_code": r["bank_code"],
-                    "owner_account_snapshot": r["owner_account_snapshot"],
-                    "amount_vnd": str(r["amount_vnd"]),
-                    "direction": r["direction"],
-                    "occurred_at": r["occurred_at"].isoformat(),
-                    "time_source": r["time_source"],
-                    "received_at": r["received_at"].isoformat(),
-                    "bank_description": r["bank_description"],
-                    "version": r["version"],
-                }
-                for r in cur.fetchall()
-            ]
-
-            # 6. Bank bindings
+            # 5. Bank bindings
             cur.execute(
                 f"""
                 SELECT id, bank_code, account_number, version, capture_from, first_received_at
@@ -161,9 +134,14 @@ def get_user_snapshot(user_id: uuid.UUID, known_revision: int | None = None) -> 
                 for r in cur.fetchall()
             ]
 
+    # 6. Pending bank events loaded with JetStream payloads
+    from qlt.messaging.inbox import get_user_inbox_events_sync
+    inbox_revision, pending_events = get_user_inbox_events_sync(user_id)
+
     return {
         "status": "snapshot",
         "revision": current_revision,
+        "inbox_revision": inbox_revision,
         "categories": categories,
         "tags": tags,
         "transactions": transactions,

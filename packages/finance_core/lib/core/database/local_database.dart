@@ -223,12 +223,39 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
         }
       }
 
-      // 4. Pending bank events
+      // 4. Pending bank events with local undo/outbox overlay
       if (snapshot.containsKey('pending_bank_events')) {
+        final hiddenIds = <String>{};
+        final undoRaw = await metadata('active_undo_slot');
+        if (undoRaw != null && undoRaw.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(undoRaw);
+            if (decoded is Map && decoded['event_id'] != null) {
+              hiddenIds.add(decoded['event_id'].toString());
+            }
+          } catch (_) {}
+        }
+
+        final outboxRows = await customSelect(
+          "SELECT payload FROM outbox WHERE json_extract(payload, '\$.type') IN ('discard_pending', 'accept_pending')",
+        ).get();
+        for (final r in outboxRows) {
+          try {
+            final p = jsonDecode(r.read<String>('payload'));
+            if (p is Map && p['pending_id'] != null) {
+              hiddenIds.add(p['pending_id'].toString());
+            }
+          } catch (_) {}
+        }
+
         await customStatement("DELETE FROM records WHERE entity = 'pending_bank_events'");
         final events = snapshot['pending_bank_events'] as List;
         for (final ev in events) {
           final data = Map<String, dynamic>.from(ev as Map);
+          final id = data['id']?.toString();
+          if (id != null && hiddenIds.contains(id)) {
+            continue;
+          }
           await put(Record(Entity.pendingBankEvents, data));
         }
       }
@@ -245,6 +272,50 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
 
       // 6. Update revision in metadata
       await setMetadata('revision', revision.toString());
+      if (snapshot.containsKey('inbox_revision')) {
+        await setMetadata('inbox_revision', snapshot['inbox_revision'].toString());
+      }
+    });
+    changes.add(null);
+  }
+
+  Future<void> applyInboxSnapshot(
+    int inboxRevision,
+    List<Map<String, dynamic>> rawEvents,
+  ) async {
+    await transaction(() async {
+      final hiddenIds = <String>{};
+      final undoRaw = await metadata('active_undo_slot');
+      if (undoRaw != null && undoRaw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(undoRaw);
+          if (decoded is Map && decoded['event_id'] != null) {
+            hiddenIds.add(decoded['event_id'].toString());
+          }
+        } catch (_) {}
+      }
+
+      final outboxRows = await customSelect(
+        "SELECT payload FROM outbox WHERE json_extract(payload, '\$.type') IN ('discard_pending', 'accept_pending')",
+      ).get();
+      for (final r in outboxRows) {
+        try {
+          final p = jsonDecode(r.read<String>('payload'));
+          if (p is Map && p['pending_id'] != null) {
+            hiddenIds.add(p['pending_id'].toString());
+          }
+        } catch (_) {}
+      }
+
+      await customStatement("DELETE FROM records WHERE entity = 'pending_bank_events'");
+      for (final ev in rawEvents) {
+        final id = ev['id']?.toString();
+        if (id != null && hiddenIds.contains(id)) {
+          continue;
+        }
+        await put(Record(Entity.pendingBankEvents, ev));
+      }
+      await setMetadata('inbox_revision', inboxRevision.toString());
     });
     changes.add(null);
   }

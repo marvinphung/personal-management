@@ -12,14 +12,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # Copy project definition
-COPY pyproject.toml .
-
-# Install dependencies into system python
-RUN uv pip install --system --no-cache -e .
-
-# Copy backend source code and migrations
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
+
+# Install dependencies into system python
+RUN uv sync --frozen --no-dev
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy backend source code and migrations
 
 # Expose default HTTP port
 EXPOSE 8000

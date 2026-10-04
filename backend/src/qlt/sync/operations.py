@@ -5,7 +5,14 @@ from pydantic import BaseModel
 from qlt.catalog.seeds import make_key
 from qlt.config import get_settings
 from qlt.db import get_connection
+from qlt.messaging.resolution import resolve_bank_event
 from qlt.sync.receipts import check_receipt, compute_request_hash, record_receipt
+
+
+def _run_async(coro):
+    from qlt.runtime import run_backend_coroutine
+    return run_backend_coroutine(coro)
+
 
 
 class TypedOperation(BaseModel):
@@ -24,6 +31,26 @@ def execute_operations_batch(user_id: uuid.UUID, operations: list[TypedOperation
         req_hash = compute_request_hash({"type": op.type, "payload": op.payload})
 
         try:
+            if op.type in ("accept_pending", "discard_pending"):
+                # Resolution owns its transaction and operation receipt. Never
+                # hold a sync revision lock while waiting for that transaction.
+                accepting = op.type == "accept_pending"
+                res = _run_async(resolve_bank_event(
+                    user_id=user_id,
+                    operation_id=op.operation_id,
+                    action="accept" if accepting else "discard",
+                    pending_id=uuid.UUID(str(op.payload["pending_id"])),
+                    category_id=uuid.UUID(str(op.payload["category_id"])) if accepting else None,
+                    tag_ids=[uuid.UUID(str(t)) for t in op.payload.get("tag_ids", [])] if accepting else [],
+                    user_note=op.payload.get("user_note", "") if accepting else "",
+                    purpose=op.payload.get("purpose", "normal") if accepting else "normal",
+                    transaction_id=uuid.UUID(str(op.payload["transaction_id"]))
+                        if accepting and op.payload.get("transaction_id") else None,
+                ))
+                results.append({"operation_id": str(op.operation_id), "status": "success",
+                    "outcome_code": res["outcome_code"], "entity_id": res["transaction_id"],
+                    "replayed": res["replayed"]})
+                continue
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     # 1. Check idempotency receipt
@@ -200,69 +227,6 @@ def execute_operations_batch(user_id: uuid.UUID, operations: list[TypedOperation
                         )
                         result_entity_id = uuid.UUID(tx_id)
 
-                    elif op.type == "accept_pending":
-                        pending_id = str(op.payload["pending_id"])
-                        cur.execute(
-                            f"SELECT * FROM {schema}.pending_bank_events WHERE id = %s AND user_id = %s FOR UPDATE;",
-                            (pending_id, u_id),
-                        )
-                        pending = cur.fetchone()
-                        if not pending:
-                            results.append({
-                                "operation_id": str(op.operation_id),
-                                "status": "error",
-                                "code": "PENDING_NOT_FOUND",
-                                "message": "Sự kiện ngân hàng không tồn tại hoặc đã được xử lý",
-                            })
-                            continue
-                        tx_id = op.payload.get("transaction_id") or str(uuid.uuid4())
-                        cat_id = str(op.payload["category_id"])
-                        note = op.payload.get("user_note", "")
-                        purpose = op.payload.get("purpose", "normal")
-
-                        cur.execute(
-                            f"""
-                            INSERT INTO {schema}.transactions (
-                                id, user_id, direction, amount_vnd, occurred_at, source,
-                                bank_code_snapshot, owner_account_snapshot, bank_description,
-                                category_id, user_note, purpose, version, source_event_key
-                            ) VALUES (%s, %s, %s, %s, %s, 'bank', %s, %s, %s, %s, %s, %s, 1, %s)
-                            RETURNING id;
-                            """,
-                            (
-                                tx_id,
-                                u_id,
-                                pending["direction"],
-                                pending["amount_vnd"],
-                                pending["occurred_at"],
-                                pending["bank_code"],
-                                pending["owner_account_snapshot"],
-                                pending["bank_description"],
-                                cat_id,
-                                note,
-                                purpose,
-                                pending["fingerprint"],
-                            ),
-                        )
-                        for t_id in op.payload.get("tag_ids", []):
-                            cur.execute(
-                                f"INSERT INTO {schema}.transaction_tags (user_id, transaction_id, tag_id) VALUES (%s, %s, %s);",
-                                (u_id, tx_id, str(t_id)),
-                            )
-                        cur.execute(
-                            f"DELETE FROM {schema}.pending_bank_events WHERE id = %s AND user_id = %s;",
-                            (pending_id, u_id),
-                        )
-                        result_entity_id = uuid.UUID(tx_id)
-
-                    elif op.type == "discard_pending":
-                        pending_id = str(op.payload["pending_id"])
-                        cur.execute(
-                            f"DELETE FROM {schema}.pending_bank_events WHERE id = %s AND user_id = %s;",
-                            (pending_id, u_id),
-                        )
-                        outcome_code = "discarded"
-                        result_entity_id = None
 
                     else:
                         results.append({

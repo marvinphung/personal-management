@@ -1,6 +1,6 @@
 # Implementation Status: Quản lý Tao
 
-Tracking implementation progress for `docs/plans/2026-10-03-quan-ly-tao-implementation.md`.
+Historical implementation report. Current project behavior is maintained in [project.md](project.md), and backend repair verification is recorded in [implementation-status-jetstream.md](implementation-status-jetstream.md). Mobile claims below have not been revalidated in the current backend-only session.
 
 ## Host Environment & Prerequisites Inventory (T01)
 

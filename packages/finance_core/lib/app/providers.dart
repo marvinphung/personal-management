@@ -32,6 +32,13 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   );
 });
 
+final realtimeClientProvider = Provider<RealtimeClient>((ref) {
+  return RealtimeClient(
+    baseUrl: ref.watch(apiBaseUrlProvider),
+    sessionStore: ref.watch(sessionStoreProvider),
+  );
+});
+
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(ref.watch(apiClientProvider));
 });
@@ -144,7 +151,8 @@ class WorkspaceController extends AsyncNotifier<UserWorkspace?> {
           return null;
         }
         final repository = FinanceRepository(db, user),
-            sync = SyncEngine(db, apiClient);
+            realtimeClient = ref.read(realtimeClientProvider),
+            sync = SyncEngine(db, apiClient, realtimeClient: realtimeClient);
         _current = UserWorkspace(db, repository, sync);
         sync.start();
         return _current;

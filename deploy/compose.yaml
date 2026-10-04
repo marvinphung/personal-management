@@ -1,4 +1,24 @@
 services:
+  nats:
+    image: nats:2.10.20-alpine
+    container_name: qlt-nats
+    restart: unless-stopped
+    command: ["-c", "/etc/nats/nats.conf"]
+    environment:
+      NATS_HOST: 0.0.0.0
+      NATS_MONITOR_LISTEN: 0.0.0.0:8222
+      NATS_STORE_DIR: /data/jetstream
+      NATS_USER: ${NATS_USER:-qlt_backend}
+      NATS_PASSWORD: ${NATS_PASSWORD:?Set NATS_PASSWORD for broker authentication}
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+      - nats_data:/data/jetstream
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    networks:
+      - qlt-network
+
   backend:
     build:
       context: ../backend
@@ -7,6 +27,10 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_USER: ${NATS_USER:-qlt_backend}
+      NATS_PASSWORD: ${NATS_PASSWORD:?Set NATS_PASSWORD for broker authentication}
     ports:
       - "8000:8000"
     healthcheck:
@@ -14,6 +38,8 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+    depends_on:
+      - nats
     networks:
       - qlt-network
 
@@ -41,3 +67,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  nats_data:

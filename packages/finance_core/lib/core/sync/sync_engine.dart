@@ -7,14 +7,21 @@ import 'outbox.dart';
 class SyncEngine extends ChangeNotifier {
   final LocalDatabase db;
   final ApiClient apiClient;
+  final RealtimeClient? realtimeClient;
   final OutboxStore outbox;
   bool busy = false, stopped = false;
   String? error;
   String? notice;
   Timer? timer;
+  StreamSubscription<InboxSnapshotEvent>? _realtimeSub;
+  StreamSubscription<SyncRequiredEvent>? _syncReqSub;
   Future<void>? _flight;
 
-  SyncEngine(this.db, this.apiClient) : outbox = OutboxStore(db);
+  SyncEngine(
+    this.db,
+    this.apiClient, {
+    this.realtimeClient,
+  }) : outbox = OutboxStore(db);
 
   void start() {
     timer = Timer.periodic(
@@ -22,6 +29,34 @@ class SyncEngine extends ChangeNotifier {
       (_) => unawaited(sync()),
     );
     unawaited(sync());
+
+    if (realtimeClient != null) {
+      unawaited(realtimeClient!.connect());
+      _realtimeSub = realtimeClient!.inboxSnapshots.listen((snapshot) async {
+        final rawEvents = snapshot.events
+            .map((e) => {
+                  'id': e.id,
+                  'user_id': e.userId,
+                  'binding_id': e.bindingId,
+                  'bank_code': e.bankCode,
+                  'owner_account_snapshot': e.ownerAccountSnapshot,
+                  'amount_vnd': e.amountVnd.toString(),
+                  'direction': e.direction,
+                  'occurred_at': e.occurredAt,
+                  'time_source': e.timeSource,
+                  'received_at': e.receivedAt,
+                  'bank_description': e.bankDescription,
+                  'version': e.version,
+                })
+            .toList();
+        await db.applyInboxSnapshot(snapshot.inboxRevision, rawEvents);
+        notifyListeners();
+      });
+
+      _syncReqSub = realtimeClient!.syncRequiredEvents.listen((_) {
+        unawaited(sync());
+      });
+    }
   }
 
   Future<void> sync() {
@@ -101,12 +136,18 @@ class SyncEngine extends ChangeNotifier {
   Future<void> stop() async {
     stopped = true;
     timer?.cancel();
+    _realtimeSub?.cancel();
+    _syncReqSub?.cancel();
+    realtimeClient?.disconnect();
     await _flight;
   }
 
   @override
   void dispose() {
     timer?.cancel();
+    _realtimeSub?.cancel();
+    _syncReqSub?.cancel();
+    realtimeClient?.disconnect();
     super.dispose();
   }
 }

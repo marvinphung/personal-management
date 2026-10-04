@@ -1,6 +1,6 @@
 # Architectural and Technical Decisions
 
-This document records architectural, technical, and implementation decisions and justified deviations as required by `docs/plans/2026-10-03-quan-ly-tao-implementation.md`.
+This document records historical architectural and implementation decisions. Current behavior and configuration are maintained in [project.md](project.md).
 
 ## 1. Application and Packaging Structure
 - **Two Applications:**

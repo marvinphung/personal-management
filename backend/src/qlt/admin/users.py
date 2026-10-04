@@ -201,29 +201,55 @@ def restore_user(user_id: uuid.UUID, admin: dict = Depends(require_admin_user)):
 
 
 @router.post("/users/{user_id}/purge")
-def purge_user(user_id: uuid.UUID, admin: dict = Depends(require_admin_user)):
+async def purge_user(user_id: uuid.UUID, admin: dict = Depends(require_admin_user)):
     settings = get_settings()
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"SELECT role, status FROM {settings.database_schema}.users WHERE id = %s;",
-                (str(user_id),),
-            )
-            user = cur.fetchone()
-            if not user:
-                raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
-            if user["role"] == "admin":
-                raise HTTPException(status_code=400, detail="Không thể xóa vĩnh viễn quản trị viên")
-            if user["status"] != "deleted":
-                raise HTTPException(status_code=400, detail="Chỉ có thể xóa vĩnh viễn tài khoản đã xóa mềm")
+    schema = settings.database_schema
+    u_id = str(user_id)
+    from qlt.db import get_async_connection
+    from qlt.messaging.client import get_jetstream
 
-            # Hard delete from users table (cascades to bindings, categories, transactions, etc.)
-            # Non-content HMAC ingest receipts are preserved!
-            cur.execute(
-                f"DELETE FROM {settings.database_schema}.users WHERE id = %s;",
-                (str(user_id),),
-            )
-        conn.commit()
+    # Keep the deleted user's row lock until both stores are cleaned. Ingestion
+    # takes a shared lock before publish; restore/delete cannot race this fence.
+    async with get_async_connection() as conn:
+        async with conn.transaction():
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    f"SELECT role, status FROM {schema}.users WHERE id=%s FOR UPDATE", (u_id,)
+                )
+                user = await cur.fetchone()
+                if not user:
+                    raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
+                if user["role"] == "admin":
+                    raise HTTPException(status_code=400, detail="Không thể xóa vĩnh viễn quản trị viên")
+                if user["status"] != "deleted":
+                    raise HTTPException(status_code=400, detail="Chỉ có thể xóa vĩnh viễn tài khoản đã xóa mềm")
 
-    revoke_all_user_sessions(user_id)
+                try:
+                    js = await get_jetstream()
+                    # Subject purge includes publishing reservations with no sequence,
+                    # and any orphan left by a lost ACK before metadata commit.
+                    ok = await js.purge_stream(
+                        settings.get_stream_name(),
+                        subject=f"{settings.get_subject_prefix()}.{user_id}.>",
+                    )
+                    if not ok:
+                        raise RuntimeError("Broker did not confirm purge")
+                except Exception as exc:
+                    # Roll back; account and bindings remain reserved and retryable.
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Chưa thể xóa dữ liệu broker. Tài khoản vẫn được giữ để thử lại.",
+                    ) from exc
+
+                await cur.execute(f"DELETE FROM {schema}.bank_event_receipts WHERE user_id=%s", (u_id,))
+                await cur.execute(f"DELETE FROM {schema}.push_devices WHERE user_id=%s", (u_id,))
+                # Pending delivery jobs are obsolete; durable cleanup jobs can safely
+                # complete later because broker deletes are idempotent.
+                await cur.execute(
+                    f"""UPDATE {schema}.metadata_outbox_jobs
+                    SET status='completed', completed_at=NOW()
+                    WHERE user_id=%s AND kind IN ('push_refresh','realtime_invalidation')""", (u_id,)
+                )
+                await cur.execute(f"DELETE FROM {schema}.users WHERE id=%s", (u_id,))
+
     return {"message": "Đã xóa vĩnh viễn người dùng và giải phóng các đăng ký số tài khoản ngân hàng"}

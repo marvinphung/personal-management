@@ -22,6 +22,7 @@ class WidgetTokenResponse(BaseModel):
 
 class WidgetSummaryResponse(BaseModel):
     pending_count: int
+    count: int
     pending_ids: list[str]
     captured_epoch: int
 
@@ -53,7 +54,7 @@ def get_widget_user(
             detail={"code": "ACCOUNT_DELETED", "message": "Tài khoản đã bị xóa"},
         )
 
-    if user.get("status") != "approved":
+    if user.get("status") not in ("approved", "active"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "USER_NOT_APPROVED", "message": "Tài khoản chưa được phê duyệt"},
@@ -87,12 +88,12 @@ def get_widget_summary(widget_user: dict = Depends(get_widget_user)):
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Query pending bank events for this user (NO financial details returned)
+            # Query pending bank events for this user from coordination metadata
             cur.execute(
                 f"""
-                SELECT id FROM {settings.database_schema}.pending_bank_events
-                WHERE owner_id = %s AND status = 'pending'
-                ORDER BY occurred_at DESC;
+                SELECT id FROM {settings.database_schema}.bank_event_receipts
+                WHERE user_id = %s AND state = 'pending'
+                ORDER BY first_received_at DESC;
                 """,
                 (user_id,),
             )
@@ -102,6 +103,7 @@ def get_widget_summary(widget_user: dict = Depends(get_widget_user)):
     epoch = int(datetime.now(timezone.utc).timestamp())
     return WidgetSummaryResponse(
         pending_count=len(pending_ids),
+        count=len(pending_ids),
         pending_ids=pending_ids,
         captured_epoch=epoch,
     )

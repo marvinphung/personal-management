@@ -7,12 +7,12 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/uv</string>
+        <string>/opt/homebrew/bin/uv</string>
         <string>run</string>
         <string>uvicorn</string>
         <string>qlt.main:app</string>
         <string>--host</string>
-        <string>0.0.0.0</string>
+        <string>127.0.0.1</string>
         <string>--port</string>
         <string>8000</string>
     </array>
@@ -23,7 +23,7 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>PYTHONUNBUFFERED</key>
         <string>1</string>
     </dict>
@@ -40,9 +40,9 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/var/log/quanlytao/backend.stdout.log</string>
+    <string>/Users/Shared/quanlytao/logs/backend.stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/var/log/quanlytao/backend.stderr.log</string>
+    <string>/Users/Shared/quanlytao/logs/backend.stderr.log</string>
 </dict>
 </plist>

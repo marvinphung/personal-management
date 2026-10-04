@@ -9,11 +9,20 @@ import psycopg
 
 
 def setup_user_and_pending_event(direction="expense", amount_vnd=150000):
+    import asyncio
+    from decimal import Decimal
+    from qlt.messaging.client import get_jetstream
+    from qlt.messaging.schemas import BankEventPayload
+    from qlt.messaging.receipts import compute_payload_hash
+    from qlt.messaging.stream import build_event_subject, build_event_msg_id
+
     settings = get_settings()
     user_id = uuid.uuid4()
     username = f"user_{user_id.hex[:8]}"
     pwd_hash = hash_password("Pass12345!")
     pending_id = uuid.uuid4()
+    binding_id = uuid.uuid4()
+    acc_num = f"00{uuid.uuid4().int % 10000000000:010d}"
     fingerprint = f"fp_{uuid.uuid4().hex}"
 
     with psycopg.connect(settings.database_url, autocommit=True) as conn:
@@ -25,6 +34,14 @@ def setup_user_and_pending_event(direction="expense", amount_vnd=150000):
                 ) VALUES (%s, %s, %s, 'user', 'active');
                 """,
                 (str(user_id), username, pwd_hash),
+            )
+            cur.execute(
+                f"""
+                INSERT INTO {settings.database_schema}.bank_bindings (
+                    id, user_id, bank_code, account_number, version, capture_from
+                ) VALUES (%s, %s, 'bidv', %s, 1, NOW());
+                """,
+                (str(binding_id), str(user_id), acc_num),
             )
             # Ingest receipt
             cur.execute(
@@ -48,6 +65,51 @@ def setup_user_and_pending_event(direction="expense", amount_vnd=150000):
                 (str(pending_id), str(user_id), amount_vnd, direction, fingerprint),
             )
         seed_user_defaults(conn, user_id)
+
+    async def _publish_pending():
+        payload = BankEventPayload(
+            id=pending_id,
+            user_id=user_id,
+            binding_id=binding_id,
+            source_type="bidv",
+            account_number_mask="...7890",
+            amount=Decimal(str(amount_vnd)),
+            direction=direction,
+            booking_time=datetime.now(timezone.utc),
+            transaction_code="REF-SETUP",
+            raw_description="BIDV-GD MUA SAM",
+            raw_payload={"source_package": "com.vnpay.bidv", "parser_version": "v1", "time_source": "bank"},
+        )
+        p_hash = compute_payload_hash(payload.model_dump())
+        js = await get_jetstream()
+        subject = build_event_subject(user_id, pending_id)
+        msg_id = build_event_msg_id(pending_id)
+        ack = await js.publish(
+            subject=subject,
+            payload=payload.model_dump_json().encode("utf-8"),
+            headers={"Nats-Msg-Id": msg_id},
+        )
+        with psycopg.connect(settings.database_url, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {settings.database_schema}.bank_event_receipts (
+                        id, user_id, binding_id, fingerprint, payload_hash,
+                        stream_name, stream_seq, state
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending');
+                    """,
+                    (
+                        str(pending_id),
+                        str(user_id),
+                        str(binding_id),
+                        fingerprint,
+                        p_hash,
+                        ack.stream,
+                        ack.seq,
+                    ),
+                )
+
+    asyncio.run(_publish_pending())
 
     token, _ = create_session(user_id, scope="user")
     return user_id, token, pending_id

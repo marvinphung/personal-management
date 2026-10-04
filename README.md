@@ -1,5 +1,7 @@
 # Quản lý Tao — Hệ thống Quản lý Tài chính Cá nhân Đa người dùng
 
+Tài liệu mô tả dự án được duy trì tại **[docs/project.md](docs/project.md)**: luồng sử dụng, luồng dữ liệu JetStream/Supabase, cấu hình và vận hành Mac mini. Các plan triển khai đã được thay thế bằng tài liệu này. Phiên sửa lỗi hiện tại chỉ xác minh backend; kiểm tra app/thiết bị để sau.
+
 Hệ thống quản lý tài chính cá nhân gồm ba thành phần chính:
 1. **Backend Service** (`backend/`): Dịch vụ FastAPI Python kết nối PostgreSQL (schema chuyên dụng `qlt`), đảm bảo xác thực người dùng/quản trị viên, đồng bộ snapshot, phân loại giao dịch biến động ngân hàng và chống trùng lặp.
 2. **Collector App** (`apps/collector_app/`): Ứng dụng Android chạy 24/7 trên điện thoại thu thập thông báo biến động số dư ngân hàng (BIDV, VietinBank, Vietcombank, Techcombank), tích hợp giao diện quản trị người dùng và thiết bị.
@@ -151,12 +153,12 @@ xcrun simctl openurl booted "quanlytao://bank-inbox"
 │       ├── ios/                # Native Swift iOS runner + WidgetKit Extension
 │       └── signing/            # Khóa ký APK release cục bộ (chỉ lưu trên máy dev)
 ├── backend/                    # Dịch vụ FastAPI Python & Migration
-│   ├── migrations/             # Schema 001..003 cho schema qlt
+│   ├── migrations/             # Schema 001..005 cho schema qlt
 │   ├── src/qlt/                # Mã nguồn auth, admin, ingest, ledger, sync, widgets
 │   └── tests/                  # Bộ kiểm thử tích hợp (integration tests)
 ├── deploy/                     # Dockerfile, Docker Compose, Caddyfile, macOS launchd
 ├── docs/                       # Tài liệu thiết kế, kế hoạch và runbooks
-│   ├── plans/                  # Kế hoạch chi tiết triển khai
+│   ├── project.md              # Mô tả đầy đủ dự án, luồng và cấu hình hiện tại
 │   └── runbooks/               # Hướng dẫn vận hành server, collector, backup, acceptance
 ├── packages/
 │   ├── api_client/             # Dart HTTP client dùng chung giữa hai app mobile
@@ -168,9 +170,7 @@ xcrun simctl openurl booted "quanlytao://bank-inbox"
 
 ## 7. Kiểm thử & Đảm bảo chất lượng (T23)
 
-Theo quy định quản lý rủi ro của dự án:
-- T01–T22 hoàn thiện toàn bộ mã nguồn, cấu hình và kịch bản trước khi chạy kiểm thử.
-- Trong T23, toàn bộ kiểm thử backend (`pytest`), flutter (`flutter test`, `flutter analyze`), native android test và kiểm thử trên thiết bị Android thật / iOS Simulator sẽ được kích hoạt đồng loạt.
+Chạy `uv run pytest tests -q` trong `backend/` với PostgreSQL/NATS test cô lập. Lệnh khởi tạo và giới hạn của kết quả kiểm thử được ghi ở [docs/project.md](docs/project.md#9-verification-and-remaining-scope). Kiểm tra Flutter, Android USB và iOS Simulator là bước riêng, hiện để sau theo yêu cầu của người dùng.
 
 Kiểm tra rò rỉ secret trong mã nguồn mobile:
 ```bash
