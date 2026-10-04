@@ -16,8 +16,11 @@ import WidgetKit
       initialUrl = url
     }
 
-    let controller: FlutterViewController = window?.rootViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(name: "app.quanlytao.user/widget", binaryMessenger: controller.binaryMessenger)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  private func configureWidgetChannel(binaryMessenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "app.quanlytao.user/widget", binaryMessenger: binaryMessenger)
     self.widgetChannel = channel
 
     channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
@@ -75,7 +78,6 @@ import WidgetKit
       }
     }
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   override func application(
@@ -92,5 +94,6 @@ import WidgetKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    configureWidgetChannel(binaryMessenger: engineBridge.applicationRegistrar.messenger())
   }
 }

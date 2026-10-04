@@ -37,7 +37,7 @@ def bootstrap_admin(username: str, password: str | None = None) -> None:
                 INSERT INTO {settings.database_schema}.users (
                     id, username, password_hash, role, status, capture_enabled, must_change_password
                 ) VALUES (%s, %s, %s, 'admin', 'active', true, false)
-                ON CONFLICT (username) DO UPDATE SET
+                ON CONFLICT (LOWER(username)) DO UPDATE SET
                     password_hash = EXCLUDED.password_hash,
                     role = 'admin',
                     status = 'active',

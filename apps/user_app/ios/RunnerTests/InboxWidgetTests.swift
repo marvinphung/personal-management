@@ -32,7 +32,7 @@ class InboxWidgetTests: XCTestCase {
             }
         }
 
-        let summary = try JSONDecoder().decode(SummaryPayload, from: json)
+        let summary = try JSONDecoder().decode(SummaryPayload.self, from: json)
         XCTAssertEqual(summary.pendingCount, 5)
         XCTAssertEqual(summary.pendingIds.count, 5)
         XCTAssertEqual(summary.pendingIds.first, "uuid-1")
@@ -64,4 +64,16 @@ class InboxWidgetTests: XCTestCase {
         let invalidUrl = URL(string: "otherapp://bank-inbox")!
         XCTAssertNotEqual(invalidUrl.scheme, "quanlytao")
     }
+
+    func testWidgetSummaryURLDoesNotDuplicateVersionPrefix() {
+        XCTAssertEqual(
+            WidgetAPI.summaryURL(baseUrl: "http://127.0.0.1:8000/v1")?.absoluteString,
+            "http://127.0.0.1:8000/v1/widget/summary"
+        )
+        XCTAssertEqual(
+            WidgetAPI.summaryURL(baseUrl: "https://api.example.test/")?.absoluteString,
+            "https://api.example.test/v1/widget/summary"
+        )
+    }
+
 }

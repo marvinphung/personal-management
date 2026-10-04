@@ -2,7 +2,7 @@
 
 This runbook documents the required procedure to build, run native Swift unit tests, deploy to the iOS Simulator, and verify the `quanlytao` User App and its count-only `InboxWidget` extension.
 
-> **Status Notice:** Per project requirements, this document prepares the exact commands and test matrix. Since the local build environment is Linux x86_64, actual iOS compilation and execution are deferred to a macOS host during validation (T23). Keep validation pending until macOS checks actually run; Android success is not iOS verification.
+> **Status Notice:** The iPhone 13 / iOS 18.6 launch and native widget tests were run on the Mac mini on 2026-10-04. Dynamic Island installation and authenticated interaction coverage remain pending; see `artifacts/verification-2026-10-04/README.md`.
 
 ---
 
@@ -91,10 +91,10 @@ Build the iOS Simulator binary with the backend API URL injected via `--dart-def
 cd apps/user_app
 
 # Build Simulator bundle
-flutter build ios --simulator --dart-define=API_BASE_URL="http://localhost:8000"
+flutter build ios --simulator --dart-define=API_BASE_URL="http://127.0.0.1:8000/v1"
 
 # Alternatively, run directly on the booted Simulator:
-flutter run -d "iPhone 16" --dart-define=API_BASE_URL="http://localhost:8000"
+flutter run -d "iPhone 16" --dart-define=API_BASE_URL="http://127.0.0.1:8000/v1"
 ```
 
 ---

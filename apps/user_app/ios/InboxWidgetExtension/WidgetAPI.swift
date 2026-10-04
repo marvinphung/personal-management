@@ -21,8 +21,14 @@ public final class WidgetAPI {
         self.session = session
     }
 
+    public static func summaryURL(baseUrl: String) -> URL? {
+        let trimmed = baseUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let apiBase = trimmed.hasSuffix("/v1") ? trimmed : "\(trimmed)/v1"
+        return URL(string: "\(apiBase)/widget/summary")
+    }
+
     public func fetchSummary(baseUrl: String, token: String, completion: @escaping (Result<WidgetSummary, Error>) -> Void) {
-        guard let url = URL(string: "\(baseUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/v1/widget/summary") else {
+        guard let url = Self.summaryURL(baseUrl: baseUrl) else {
             completion(.failure(URLError(.badURL)))
             return
         }
@@ -57,7 +63,7 @@ public final class WidgetAPI {
             }
 
             do {
-                let summary = try JSONDecoder().decode(WidgetSummary, from: data)
+                let summary = try JSONDecoder().decode(WidgetSummary.self, from: data)
                 WidgetCache.shared.setPendingCount(summary.pendingCount)
                 WidgetCache.shared.setLastError(nil)
                 completion(.success(summary))
