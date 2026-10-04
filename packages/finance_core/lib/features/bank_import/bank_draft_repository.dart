@@ -13,7 +13,9 @@ final bankDraftRepositoryProvider = Provider<BankDraftRepository>((ref) {
 /// Only this adapter knows platform method names. Linux never invokes the channel.
 class BankDraftRepository {
   static bool get supported =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      const bool.fromEnvironment('BANK_INBOX_NATIVE_ENABLED') &&
+      !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.android;
   final MethodChannel channel;
   final events = StreamController<String>.broadcast();
   String? _owner;

@@ -26,6 +26,12 @@ class BankListScreen extends ConsumerWidget {
         title: const Text('Tài khoản ngân hàng liên kết'),
         actions: [
           IconButton(
+            tooltip: 'Thêm tài khoản ngân hàng',
+            icon: const Icon(Icons.add),
+            onPressed: () => _openLinkForm(context, ref),
+          ),
+          IconButton(
+            tooltip: 'Làm mới',
             icon: const Icon(Icons.refresh),
             onPressed: () {
               ref.invalidate(userBindingsProvider);

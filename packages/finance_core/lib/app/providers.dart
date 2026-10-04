@@ -1,6 +1,7 @@
 import '../features/bank_import/bank_draft_repository.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
@@ -157,7 +158,9 @@ class WorkspaceController extends AsyncNotifier<UserWorkspace?> {
         sync.start();
         return _current;
 
-      } catch (_) {
+      } catch (error, stackTrace) {
+        debugPrint('Failed to open local workspace: $error');
+        debugPrintStack(stackTrace: stackTrace);
         await db.close();
         rethrow;
       }
@@ -248,5 +251,4 @@ final searchRepositoryProvider = FutureProvider<SearchRepository?>((ref) async {
   final w = await ref.watch(workspaceProvider.future);
   return w == null ? null : SearchRepository(w.db);
 });
-
 

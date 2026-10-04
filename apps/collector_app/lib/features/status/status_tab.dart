@@ -13,6 +13,8 @@ class _StatusTabState extends State<StatusTab> {
 
   bool permissionGranted = false;
   bool listenerConnected = false;
+  bool backendConfigured = false;
+  bool credentialConfigured = false;
   int queueSize = 0;
   String? latestReceiveTime;
   String? latestUploadTime;
@@ -32,16 +34,19 @@ class _StatusTabState extends State<StatusTab> {
         setState(() {
           permissionGranted = res['permission_granted'] == true;
           listenerConnected = res['listener_connected'] == true;
+          backendConfigured = res['backend_configured'] == true;
+          credentialConfigured = res['credential_configured'] == true;
           queueSize = (res['queue_size'] as num?)?.toInt() ?? 0;
           latestReceiveTime = res['latest_receive_time'] as String?;
           latestUploadTime = res['latest_upload_time'] as String?;
         });
       }
     } catch (_) {
-      // In simulator or fallback environment
       setState(() {
-        permissionGranted = true;
-        listenerConnected = true;
+        permissionGranted = false;
+        listenerConnected = false;
+        backendConfigured = false;
+        credentialConfigured = false;
         queueSize = 0;
       });
     } finally {
@@ -109,6 +114,33 @@ class _StatusTabState extends State<StatusTab> {
                 ),
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: Icon(
+                  backendConfigured ? Icons.cloud_done : Icons.cloud_off,
+                  color: backendConfigured ? Colors.green : Colors.red,
+                ),
+                title: const Text('Máy chủ HTTPS'),
+                subtitle: Text(backendConfigured ? 'Đã cấu hình' : 'Chưa cấu hình'),
+              ),
+              ListTile(
+                leading: Icon(
+                  credentialConfigured ? Icons.verified_user : Icons.gpp_bad,
+                  color: credentialConfigured ? Colors.green : Colors.red,
+                ),
+                title: const Text('Thông tin xác thực Collector'),
+                subtitle: Text(
+                  credentialConfigured
+                      ? 'Đã cấu hình'
+                      : 'Chưa được server cấp credential; hàng đợi chưa thể tải lên',
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),

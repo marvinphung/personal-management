@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'features/auth/admin_login_screen.dart';
 import 'features/banks/bank_settings_tab.dart';
 import 'features/device/device_tab.dart';
 import 'features/status/status_tab.dart';
 import 'features/users/users_tab.dart';
 
-void main() {
+const _collectorStatusChannel = MethodChannel('app.quanlytao.collector/status');
+const _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (_apiBaseUrl.isNotEmpty) {
+    await _collectorStatusChannel.invokeMethod<void>(
+      'configureBackend',
+      {'url': _apiBaseUrl},
+    );
+  }
   runApp(const ProviderScope(child: CollectorApp()));
 }
 

@@ -1,6 +1,7 @@
 package app.quanlytao.collector.queue
 
 import android.content.Context
+import app.quanlytao.collector.config.CollectorPreferences
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.NetworkType
@@ -27,9 +28,8 @@ class UploadWorker(
             return Result.success()
         }
 
-        val prefs = appContext.getSharedPreferences("collector_prefs", Context.MODE_PRIVATE)
-        val baseUrl = prefs.getString("backend_url", "http://10.0.2.2:8000/v1") ?: "http://10.0.2.2:8000/v1"
-        val credential = prefs.getString("collector_token", null)
+        val baseUrl = CollectorPreferences.getBackendUrl(appContext) ?: return Result.failure()
+        val credential = CollectorPreferences.getCredential(appContext) ?: return Result.failure()
 
         val cleanBase = if (baseUrl.endsWith("/")) baseUrl.substring(0, baseUrl.length - 1) else baseUrl
         val endpoint = URL("$cleanBase/collector/events")
@@ -62,9 +62,7 @@ class UploadWorker(
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Accept", "application/json")
-            if (!credential.isNullOrBlank()) {
-                conn.setRequestProperty("Authorization", "Bearer $credential")
-            }
+            conn.setRequestProperty("Authorization", "Bearer $credential")
             conn.doOutput = true
             conn.connectTimeout = 10000
             conn.readTimeout = 10000
