@@ -7,17 +7,17 @@ không phải backend production cũ.
 ## Endpoint cần dùng
 
 ```text
-API_BASE_URL=https://fendee.tail95473a.ts.net:8443/v1
-Health check=https://fendee.tail95473a.ts.net:8443/v1/health/ready
-Swagger=https://fendee.tail95473a.ts.net:8443/docs
+API_BASE_URL=https://api.xn--qun-l-tao-49a0064f.id.vn/v1
+Health check=https://api.xn--qun-l-tao-49a0064f.id.vn/v1/health/ready
+Swagger=https://api.xn--qun-l-tao-49a0064f.id.vn/docs
 ```
 
-Tailscale Serve chuyển tiếp HTTPS port `8443` tới backend local
-`127.0.0.1:8001`. Endpoint chỉ truy cập được từ thiết bị thuộc cùng tailnet.
+Cloudflare Tunnel chuyển tiếp HTTPS công khai tới backend local
+`127.0.0.1:8001`. Thiết bị test không cần tham gia Tailscale.
 
 Không dùng các endpoint sau cho đợt test này:
 
-- `https://fendee.tail95473a.ts.net/v1`: port 443 đang trỏ tới backend cũ ở port 8000.
+- `https://fendee.tail95473a.ts.net/v1`: endpoint Tailscale cũ.
 - `http://100.123.5.30:8001`: backend local chỉ bind loopback và kết nối này không có TLS.
 - `10.0.2.2`: chỉ phù hợp khi Android Emulator chạy ngay trên chính Mac mini.
 
@@ -35,11 +35,10 @@ chờ phân loại trong JetStream.
 
 ## Yêu cầu trên thiết bị Android
 
-1. Cài Tailscale và đăng nhập đúng tailnet chứa máy `fendee` (`100.123.5.30`).
-2. Mở URL health check bằng Chrome trên Android.
-3. Chỉ tiếp tục nếu nhận JSON có `status: ready`, `database: connected` và
+1. Mở URL health check bằng Chrome trên Android.
+2. Chỉ tiếp tục nếu nhận JSON có `status: ready`, `database: connected` và
    `broker: connected`.
-4. Bật USB debugging nếu cài app qua ADB.
+3. Bật USB debugging nếu cài app qua ADB.
 
 ## Build và chạy từ repository
 
@@ -47,7 +46,7 @@ Tại thư mục gốc repository:
 
 ```bash
 flutter devices
-API_BASE_URL=https://fendee.tail95473a.ts.net:8443/v1 \
+API_BASE_URL=https://api.xn--qun-l-tao-49a0064f.id.vn/v1 \
   python3 tool/flutter_client.py user run -d DEVICE_ID
 ```
 
@@ -59,7 +58,7 @@ Nếu cần build APK thay vì `flutter run`:
 ```bash
 cd apps/user_app
 flutter build apk --debug \
-  --dart-define=API_BASE_URL=https://fendee.tail95473a.ts.net:8443/v1
+  --dart-define=API_BASE_URL=https://api.xn--qun-l-tao-49a0064f.id.vn/v1
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
@@ -89,10 +88,10 @@ Bạn đang test Android User App của repository personal-management.
 Hãy dùng tài liệu docs/runbooks/android-remote-local-server.md làm nguồn hướng
 dẫn chính. Backend local hiện đã chạy trên Mac mini và được publish riêng qua:
 
-API_BASE_URL=https://fendee.tail95473a.ts.net:8443/v1
+API_BASE_URL=https://api.xn--qun-l-tao-49a0064f.id.vn/v1
 
-Thiết bị Android phải đăng nhập cùng Tailscale tailnet. Trước tiên hãy mở hoặc
-curl endpoint /v1/health/ready và chỉ tiếp tục khi database + broker đều
+Endpoint được public qua Cloudflare Tunnel, không cần Tailscale. Trước tiên hãy
+mở hoặc curl endpoint /v1/health/ready và chỉ tiếp tục khi database + broker đều
 connected. Sau đó build/run apps/user_app với API_BASE_URL truyền qua
 --dart-define (ưu tiên tool/flutter_client.py), cài lên thiết bị Android, đăng
 nhập bằng tài khoản demo ghi trong runbook và thực hiện toàn bộ checklist.
