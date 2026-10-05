@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:api_client/api_client.dart';
+import 'package:uuid/uuid.dart';
 import '../../app/providers.dart';
 import '../../app/widgets.dart';
+import '../../core/database/record.dart';
 import '../../core/localization/app_language.dart';
 import '../../core/utils/money.dart';
-import '../transactions/transaction_form.dart';
-import 'bank_draft.dart';
-import 'bank_draft_repository.dart';
+import 'bank_confirmation.dart';
 import 'bank_providers.dart';
 
 class PendingBankScreen extends ConsumerStatefulWidget {
@@ -16,28 +17,53 @@ class PendingBankScreen extends ConsumerStatefulWidget {
 }
 
 class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
-  int offset = 0;
   bool busy = false;
-  Future<void> review(BankDraft draft) async {
+  Record _record(PendingBankEventDto event) => Record(
+    Entity.pendingBankEvents,
+    {
+      'id': event.id,
+      'user_id': event.userId,
+      'bank_code': event.bankCode,
+      'owner_account_snapshot': event.ownerAccountSnapshot,
+      'direction': event.direction,
+      'amount_vnd': event.amountVnd,
+      'occurred_at': event.occurredAt,
+      'time_source': event.timeSource,
+      'bank_description': event.bankDescription,
+    },
+  );
+
+  Future<void> review(PendingBankEventDto event) async {
     setState(() => busy = true);
     try {
-      final workspace = await ref.read(workspaceProvider.future);
-      if (workspace == null || workspace.repository.userId != draft.owner) {
-        return;
-      }
-      final settings = await ref.read(bankDraftRepositoryProvider).settings();
-      final sources = (settings['sources'] as List).cast<Map>();
-      final account =
-          sources
-                  .where((s) => s['code'] == draft.bankCode)
-                  .firstOrNull?['account']
-              as String?;
+      final categories = await ref.read(recordsProvider(Entity.categories).future);
+      final tags = await ref.read(recordsProvider(Entity.tags).future);
       if (!mounted) return;
-      await showDialog<void>(
+      await showModalBottomSheet<void>(
         context: context,
-        builder: (_) => TransactionForm(
-          record: draft.toTransaction(workspace.repository, accountId: account),
-          bankDraft: draft,
+        isScrollControlled: true,
+        builder: (_) => BankEventClassificationSheet(
+          pendingEvent: _record(event),
+          categories: categories,
+          tags: tags,
+          onAccept: (categoryId, tagIds, note) async {
+            await ref.read(apiClientProvider).acceptPendingEvent(
+              eventId: event.id,
+              operationId: const Uuid().v4(),
+              transactionId: const Uuid().v4(),
+              categoryId: categoryId,
+              tagIds: tagIds,
+              userNote: note,
+            );
+            ref.invalidate(pendingBankEventsProvider);
+          },
+          onDiscard: () async {
+            await ref.read(apiClientProvider).discardPendingEvent(
+              eventId: event.id,
+              operationId: const Uuid().v4(),
+            );
+            ref.invalidate(pendingBankEventsProvider);
+          },
         ),
       );
     } catch (_) {
@@ -52,14 +78,14 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
     }
   }
 
-  Future<void> ignore(BankDraft draft) async {
+  Future<void> ignore(PendingBankEventDto event) async {
     setState(() => busy = true);
     try {
-      await ref
-          .read(bankDraftRepositoryProvider)
-          .finish(draft, confirmed: false);
-      ref.invalidate(bankDraftPageProvider);
-      ref.invalidate(bankCountProvider);
+      await ref.read(apiClientProvider).discardPendingEvent(
+        eventId: event.id,
+        operationId: const Uuid().v4(),
+      );
+      ref.invalidate(pendingBankEventsProvider);
     } catch (_) {
       if (mounted) {
         message(
@@ -74,16 +100,14 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final drafts = ref.watch(bankDraftPageProvider(offset));
-    final count = ref.watch(bankCountProvider).value;
+    final drafts = ref.watch(pendingBankEventsProvider);
+    final count = drafts.value?.length;
     return Column(
       children: [
         ListTile(
           title: Text(context.tr('Pending transactions')),
           subtitle: Text(
-            context.tr(
-              'Bank drafts stay on this Android device until you confirm.',
-            ),
+            'Đồng bộ an toàn từ máy nhận thông báo ngân hàng.',
           ),
           trailing: Text(count?.toString() ?? '…'),
         ),
@@ -92,15 +116,14 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (_, _) => Center(
               child: TextButton(
-                onPressed: () => ref.invalidate(bankDraftPageProvider),
+                onPressed: () => ref.invalidate(pendingBankEventsProvider),
                 child: Text(context.tr('Retry')),
               ),
             ),
             data: (rows) => RefreshIndicator(
               onRefresh: () async {
-                ref.invalidate(bankDraftPageProvider);
-                ref.invalidate(bankCountProvider);
-                await ref.read(bankDraftPageProvider(offset).future);
+                ref.invalidate(pendingBankEventsProvider);
+                await ref.read(pendingBankEventsProvider.future);
               },
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
@@ -123,21 +146,21 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
                                   ? '+'
                                   : draft.direction == 'expense'
                                   ? '−'
-                                  : '?'}${Money.format(draft.amountMinor, draft.currency)}',
+                                  : '?'}${Money.format(draft.amountVnd, 'VND')}',
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                             Text(
-                              '${draft.bankName} · ${context.dateLabel(draft.occurredAt, time: true)}',
+                              '${draft.bankCode.toUpperCase()} · ${context.dateLabel(DateTime.parse(draft.occurredAt).toLocal(), time: true)}',
                             ),
-                            if (draft.occurredAtSource ==
+                            if (draft.timeSource ==
                                 'notification_post_time')
                               Text(
                                 context.tr(
                                   'Time uses notification arrival; please review.',
                                 ),
                               ),
-                            if (draft.description.isNotEmpty)
-                              Text(draft.description),
+                            if (draft.bankDescription.isNotEmpty)
+                              Text(draft.bankDescription),
                             const SizedBox(height: 8),
                             Wrap(
                               alignment: WrapAlignment.end,
@@ -157,23 +180,6 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
                         ),
                       ),
                     ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TextButton(
-                        onPressed: offset == 0
-                            ? null
-                            : () => setState(() => offset -= 100),
-                        child: Text(context.tr('Previous')),
-                      ),
-                      TextButton(
-                        onPressed: rows.length < 100
-                            ? null
-                            : () => setState(() => offset += 100),
-                        child: Text(context.tr('Next')),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),

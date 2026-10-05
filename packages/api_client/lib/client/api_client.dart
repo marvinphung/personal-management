@@ -252,6 +252,18 @@ class ApiClient {
 
   // --- Admin ---
 
+  /// Issues a one-time credential for the current collector without changing
+  /// collector identity or epoch. This request must never be retried blindly.
+  Future<Map<String, dynamic>> enrollCurrentCollector() async {
+    final res = await _httpClient.post(
+      Uri.parse(_cleanUrl('/admin/collectors/enroll')),
+      headers: await _headers(),
+      body: jsonEncode({'handover': false}),
+    );
+    _handleError(res);
+    return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+  }
+
   Future<List<UserDto>> listUsers([String? status]) async {
     final uri = Uri.parse(_cleanUrl('/admin/users')).replace(
       queryParameters: status != null ? {'status': status} : null,
@@ -345,4 +357,3 @@ class ApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 }
-

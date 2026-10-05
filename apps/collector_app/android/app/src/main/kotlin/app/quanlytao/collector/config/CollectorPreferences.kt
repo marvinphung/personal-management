@@ -6,7 +6,6 @@ import android.net.Uri
 object CollectorPreferences {
     private const val PREFS_NAME = "collector_prefs"
     private const val KEY_BACKEND_URL = "backend_url"
-    private const val KEY_COLLECTOR_TOKEN = "collector_token"
 
     private fun preferences(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -23,12 +22,14 @@ object CollectorPreferences {
     fun getBackendUrl(context: Context): String? =
         preferences(context).getString(KEY_BACKEND_URL, null)?.takeIf { it.isNotBlank() }
 
-    fun getCredential(context: Context): String? =
-        preferences(context).getString(KEY_COLLECTOR_TOKEN, null)?.takeIf { it.isNotBlank() }
+    fun getCredential(context: Context): String? = CollectorCredentialStore.get(context)
 
-    fun hasCredential(context: Context): Boolean = getCredential(context) != null
+    fun hasCredential(context: Context): Boolean = CollectorCredentialStore.has(context)
+
+    fun clearCredential(context: Context) = CollectorCredentialStore.clear(context)
 
     fun clear(context: Context) {
         preferences(context).edit().clear().commit()
+        CollectorCredentialStore.clear(context)
     }
 }

@@ -78,6 +78,7 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(workspaceProvider).value?.sync.sync();
+      ref.invalidate(pendingBankEventsProvider);
       if (BankDraftRepository.supported) {
         ref.invalidate(bankDraftPageProvider);
         ref.invalidate(bankDraftsProvider);

@@ -6,11 +6,12 @@ import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
 
 object VietinParser {
-    const val VERSION = "vietinbank-v2"
+    const val VERSION = "vietinbank-v3"
     private val ZONE_VN = ZoneId.of("Asia/Ho_Chi_Minh")
 
     private val ACCOUNT_REGEX = Pattern.compile("TK:\\s*([0-9A-Za-z]+)", Pattern.CASE_INSENSITIVE)
-    private val AMOUNT_TIME_REGEX = Pattern.compile("GD:\\s*([+\\-])\\s*([0-9.,]+)\\s*(?:VND|đ)\\s+([0-9]{1,2}/[0-9]{1,2}/[0-9]{4}\\s+[0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?)", Pattern.CASE_INSENSITIVE)
+    private val AMOUNT_REGEX = Pattern.compile("GD:\\s*([+\\-])\\s*([0-9.,]+)\\s*(?:VND|đ)", Pattern.CASE_INSENSITIVE)
+    private val DATE_TIME_REGEX = Pattern.compile("([0-9]{1,2}/[0-9]{1,2}/[0-9]{4}\\s+[0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?)", Pattern.CASE_INSENSITIVE)
     private val CONTENT_REGEX = Pattern.compile("ND:\\s*([^|]+)", Pattern.CASE_INSENSITIVE)
 
     fun parse(text: String, postTime: Long): ParsedEvent? {
@@ -20,7 +21,7 @@ object VietinParser {
         if (!accMatcher.find()) return null
         val ownerAccount = accMatcher.group(1)?.trim() ?: return null
 
-        val amtMatcher = AMOUNT_TIME_REGEX.matcher(text)
+        val amtMatcher = AMOUNT_REGEX.matcher(text)
         if (!amtMatcher.find()) return null
         val sign = amtMatcher.group(1) ?: return null
         val rawAmount = amtMatcher.group(2) ?: return null
@@ -30,8 +31,9 @@ object VietinParser {
         var occurredAt = postTime
         var timeSource = "notification"
 
-        val rawDateTime = amtMatcher.group(3)
-        if (rawDateTime != null) {
+        val dateTimeMatcher = DATE_TIME_REGEX.matcher(text)
+        if (dateTimeMatcher.find()) {
+            val rawDateTime = dateTimeMatcher.group(1) ?: return null
             try {
                 val fullPattern = if (rawDateTime.count { it == ':' } == 2) "dd/MM/yyyy HH:mm:ss" else "dd/MM/yyyy HH:mm"
                 val formatter = DateTimeFormatter.ofPattern(fullPattern)

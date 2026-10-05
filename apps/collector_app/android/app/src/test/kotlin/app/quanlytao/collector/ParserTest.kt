@@ -68,6 +68,25 @@ class ParserTest {
     }
 
     @Test
+    fun testBidvLiveNotificationKeepsDescription() {
+        val text = """Thời gian giao dịch: 00:59 05/10/2026
+Tài khoản thanh toán: 8881699211
+Số tiền GD: +444,444 VND
+Số dư cuối: 7,701,732 VND
+Nội dung giao dịch: TKThe :0386883005, tai MSCBVNVX. PHUNG MINH VU chuyen tien
+Mã giao dịch: 86821fco-8CbxyCwIv"""
+
+        val event = ParserRouter.parse("com.vnpay.bidv", text, 0)
+
+        assertNotNull(event)
+        assertEquals(444444L, event!!.amountVnd)
+        assertEquals(
+            "TKThe :0386883005, tai MSCBVNVX. PHUNG MINH VU chuyen tien",
+            event.bankDescription,
+        )
+    }
+
+    @Test
     fun testVietinBankBalanceStripped() {
         val fixture = loadFixture("vietinbank_income.json")
         val event = ParserRouter.parse(
@@ -82,6 +101,28 @@ class ParserTest {
         assertEquals(500000L, event.amountVnd)
         assertEquals("Luong thang 9", event.bankDescription)
         assertFalse(event.bankDescription.contains("SDC"))
+    }
+
+    @Test
+    fun testVietinBankLiveNotificationWithDateBeforeAccount() {
+        val text = """VietinBank:05/10/2026 00:59
+TK:105880086153
+GD:+333,333 VND
+SDC:5,911,302 VND
+ND:CT DEN:142T26A07TMFE742 PHUNG MINH VU chuyen tien (0386883005)"""
+
+        val event = ParserRouter.parse("com.vietinbank.ipay", text, 0)
+
+        assertNotNull(event)
+        assertEquals("vietinbank", event!!.bankCode)
+        assertEquals("105880086153", event.ownerAccount)
+        assertEquals("income", event.direction)
+        assertEquals(333333L, event.amountVnd)
+        assertEquals("bank_text", event.timeSource)
+        assertEquals(
+            "CT DEN:142T26A07TMFE742 PHUNG MINH VU chuyen tien (0386883005)",
+            event.bankDescription,
+        )
     }
 
     @Test

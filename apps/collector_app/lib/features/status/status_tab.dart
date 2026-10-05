@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:api_client/api_client.dart';
 
 class StatusTab extends StatefulWidget {
-  const StatusTab({super.key});
+  final ApiClient apiClient;
+  const StatusTab({super.key, required this.apiClient});
 
   @override
   State<StatusTab> createState() => _StatusTabState();
@@ -15,6 +17,8 @@ class _StatusTabState extends State<StatusTab> {
   bool listenerConnected = false;
   bool backendConfigured = false;
   bool credentialConfigured = false;
+  int bindingCount = 0;
+  String? activationError;
   int queueSize = 0;
   String? latestReceiveTime;
   String? latestUploadTime;
@@ -36,6 +40,7 @@ class _StatusTabState extends State<StatusTab> {
           listenerConnected = res['listener_connected'] == true;
           backendConfigured = res['backend_configured'] == true;
           credentialConfigured = res['credential_configured'] == true;
+          bindingCount = (res['binding_count'] as num?)?.toInt() ?? 0;
           queueSize = (res['queue_size'] as num?)?.toInt() ?? 0;
           latestReceiveTime = res['latest_receive_time'] as String?;
           latestUploadTime = res['latest_upload_time'] as String?;
@@ -47,8 +52,29 @@ class _StatusTabState extends State<StatusTab> {
         listenerConnected = false;
         backendConfigured = false;
         credentialConfigured = false;
+        bindingCount = 0;
         queueSize = 0;
       });
+    } finally {
+      if (mounted) setState(() => checking = false);
+    }
+  }
+
+  Future<void> _activateCollector() async {
+    setState(() {
+      checking = true;
+      activationError = null;
+    });
+    try {
+      final enrollment = await widget.apiClient.enrollCurrentCollector();
+      await platform.invokeMethod<void>('activateCollector', {
+        'collector_token': enrollment['collector_token'],
+        'collector_epoch': enrollment['collector_epoch'],
+        'bindings': enrollment['bindings'],
+      });
+      await _refreshStatus();
+    } catch (error) {
+      if (mounted) setState(() => activationError = error.toString());
     } finally {
       if (mounted) setState(() => checking = false);
     }
@@ -139,7 +165,25 @@ class _StatusTabState extends State<StatusTab> {
                       ? 'Đã cấu hình'
                       : 'Chưa được server cấp credential; hàng đợi chưa thể tải lên',
                 ),
+                trailing: FilledButton(
+                  onPressed: checking ? null : _activateCollector,
+                  child: Text(credentialConfigured ? 'Cấp lại' : 'Kích hoạt'),
+                ),
               ),
+              if (credentialConfigured)
+                ListTile(
+                  leading: const Icon(Icons.account_balance_outlined),
+                  title: const Text('Tài khoản đang theo dõi'),
+                  trailing: Text('$bindingCount'),
+                ),
+              if (activationError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Text(
+                    activationError!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
             ],
           ),
         ),

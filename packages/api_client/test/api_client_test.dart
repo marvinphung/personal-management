@@ -114,5 +114,43 @@ void main() {
       await api.logout();
       expect(await sessionStore.getToken(), isNull);
     });
+
+    test('collector enrollment is explicit and never requests handover', () async {
+      final sessionStore = InMemorySessionStore('admin_token');
+      final mockClient = MockClient((request) async {
+        expect(request.url.path, '/v1/admin/collectors/enroll');
+        expect(request.headers['Authorization'], 'Bearer admin_token');
+        expect(jsonDecode(request.body), {'handover': false});
+        return http.Response(
+          jsonEncode({
+            'collector_id': 'collector-1',
+            'collector_token': 'one-time-token',
+            'collector_epoch': 1,
+            'state': 'active',
+            'handover_performed': false,
+            'bindings': [
+              {
+                'binding_id': 'binding-1',
+                'bank_code': 'bidv',
+                'account_number': '1234',
+                'binding_version': 1,
+                'capture_epoch': 1,
+              },
+            ],
+          }),
+          201,
+        );
+      });
+      final api = ApiClient(
+        baseUrl: 'http://localhost:8000/v1',
+        sessionStore: sessionStore,
+        httpClient: mockClient,
+      );
+
+      final enrollment = await api.enrollCurrentCollector();
+
+      expect(enrollment['collector_token'], 'one-time-token');
+      expect(enrollment['handover_performed'], false);
+    });
   });
 }

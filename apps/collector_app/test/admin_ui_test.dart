@@ -47,13 +47,18 @@ void main() {
     await tester.tap(find.text('Thiết bị'));
     await tester.pumpAndSettle();
     expect(find.text('Thiết bị & Chuyển giao'), findsOneWidget);
+    expect(find.text('Đẩy hết'), findsNothing);
   });
 
   testWidgets('StatusTab displays health metadata without payload leaks', (tester) async {
+    final apiClient = ApiClient(
+      baseUrl: 'https://example.invalid/v1',
+      sessionStore: InMemorySessionStore(),
+    );
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
-          body: StatusTab(),
+          body: StatusTab(apiClient: apiClient),
         ),
       ),
     );

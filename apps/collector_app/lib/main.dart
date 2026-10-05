@@ -82,7 +82,7 @@ class _CollectorHomeScreenState extends ConsumerState<CollectorHomeScreen> {
     final apiClient = ref.watch(collectorApiClientProvider);
 
     final tabs = [
-      const StatusTab(),
+      StatusTab(apiClient: apiClient),
       UsersTab(apiClient: apiClient),
       BankSettingsTab(apiClient: apiClient),
       DeviceTab(apiClient: apiClient),

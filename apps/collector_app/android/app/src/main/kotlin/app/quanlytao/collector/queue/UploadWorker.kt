@@ -3,6 +3,8 @@ package app.quanlytao.collector.queue
 import android.content.Context
 import app.quanlytao.collector.config.CollectorPreferences
 import androidx.work.Constraints
+import androidx.work.BackoffPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
@@ -15,6 +17,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
 
 class UploadWorker(
     private val appContext: Context,
@@ -91,6 +94,7 @@ class UploadWorker(
                 return Result.success()
             } else if (code == 401 || code == 403) {
                 // Collector credential or epoch failure: do not busy loop
+                CollectorPreferences.clearCredential(appContext)
                 return Result.failure()
             } else {
                 // 5xx or server temporary error: retry with backoff
@@ -115,9 +119,17 @@ class UploadWorker(
 
             val request = OneTimeWorkRequestBuilder<UploadWorker>()
                 .setConstraints(constraints)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
                 .build()
 
-            WorkManager.getInstance(context).enqueue(request)
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "collector-upload",
+                // A retrying worker may be hours into exponential backoff. Every
+                // new notification and listener reconnect is a fresh signal that
+                // must attempt the complete durable queue immediately.
+                ExistingWorkPolicy.REPLACE,
+                request,
+            )
         }
     }
 }

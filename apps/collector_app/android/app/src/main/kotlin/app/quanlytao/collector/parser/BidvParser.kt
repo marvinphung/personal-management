@@ -12,7 +12,7 @@ object BidvParser {
     private val ACCOUNT_REGEX = Pattern.compile("Tài khoản thanh toán:\\s*([0-9A-Za-z]+)", Pattern.CASE_INSENSITIVE)
     private val AMOUNT_REGEX = Pattern.compile("Số tiền GD:\\s*([+\\-])\\s*([0-9.,]+)\\s*(?:VND|đ)", Pattern.CASE_INSENSITIVE)
     private val TIME_REGEX = Pattern.compile("Thời gian giao dịch:\\s*([0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?)\\s+([0-9]{1,2}/[0-9]{1,2}/[0-9]{4})", Pattern.CASE_INSENSITIVE)
-    private val CONTENT_REGEX = Pattern.compile("Nội dung:\\s*(.+?)(?:\\.\\s*Số dư:|$)", Pattern.CASE_INSENSITIVE)
+    private val CONTENT_REGEX = Pattern.compile("Nội dung(?: giao dịch)?:\\s*(.+?)(?:\\.\\s*Số dư:|\\s*Mã giao dịch:|$)", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
 
     fun parse(text: String, postTime: Long): ParsedEvent? {
         if (text.contains("***")) return null // Reject masked accounts

@@ -17,7 +17,6 @@ class _DeviceTabState extends State<DeviceTab> {
   int queueSize = 0;
   bool isPrimary = true;
   int collectorEpoch = 1;
-  bool draining = false;
 
   @override
   void initState() {
@@ -36,27 +35,6 @@ class _DeviceTabState extends State<DeviceTab> {
     } catch (_) {}
   }
 
-  Future<void> _drainQueue() async {
-    setState(() => draining = true);
-    try {
-      await platform.invokeMethod('drainQueue');
-      await _checkQueue();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã yêu cầu đẩy toàn bộ hàng đợi')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => draining = false);
-    }
-  }
-
   Future<void> _initiateHandover() async {
     await _checkQueue();
 
@@ -70,12 +48,12 @@ class _DeviceTabState extends State<DeviceTab> {
           content: Text(
             'Hiện tại máy này vẫn còn $queueSize thông báo biến động trong hàng đợi chưa được tải lên máy chủ thành công.\n\n'
             'Nếu kích hoạt máy mới ngay, các thông báo cũ còn kẹt trên máy này sẽ bị từ chối (do epoch đã tăng) và không thể bổ sung lại từ ngân hàng.\n\n'
-            'Bạn nên đẩy hết hàng đợi trước khi kích hoạt máy mới.',
+            'Hãy chờ ứng dụng tự gửi hết hàng đợi trước khi kích hoạt máy mới.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Hủy để đẩy hàng đợi'),
+              child: const Text('Hủy và chờ đồng bộ'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade800),
@@ -148,12 +126,18 @@ class _DeviceTabState extends State<DeviceTab> {
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.inventory_2_outlined),
                   title: const Text('Số thông báo trong hàng đợi cục bộ'),
-                  subtitle: Text(queueSize == 0 ? 'Hàng đợi trống' : '$queueSize thông báo đang chờ tải lên'),
-                  trailing: TextButton.icon(
-                    icon: const Icon(Icons.upload),
-                    label: const Text('Đẩy hết'),
-                    onPressed: (queueSize > 0 && !draining) ? _drainQueue : null,
+                  subtitle: Text(
+                    queueSize == 0
+                        ? 'Đã tự động đồng bộ đầy đủ'
+                        : '$queueSize thông báo đang tự động chờ gửi lại',
                   ),
+                  trailing: queueSize == 0
+                      ? const Icon(Icons.cloud_done, color: Colors.green)
+                      : const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                 ),
               ],
             ),
@@ -183,7 +167,7 @@ class _DeviceTabState extends State<DeviceTab> {
                   '1. Cài đặt Quản lý Tao — Máy chủ trên điện thoại mới.\n'
                   '2. Cài đặt và đăng nhập app ngân hàng, bật chia sẻ thông báo.\n'
                   '3. Cấp quyền Notification Listener trên máy mới.\n'
-                  '4. Đẩy hết hàng đợi trên máy cũ nếu máy cũ vẫn hoạt động.\n'
+                  '4. Chờ hàng đợi trên máy cũ tự đồng bộ hết.\n'
                   '5. Nhấn nút kích hoạt dưới đây trên máy mới để nhận quyền chính thức.',
                   style: TextStyle(fontSize: 13, height: 1.4),
                 ),

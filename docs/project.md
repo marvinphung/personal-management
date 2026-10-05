@@ -1,6 +1,6 @@
 # Quản lý Tao — Project Reference
 
-Updated: 2026-10-04. This is the maintained project description, replacing the implementation plans. It records the agreed product, backend behavior, configuration and operating procedures. The backend and iPhone 13 Simulator launch/widget build were revalidated on the Mac mini; the remaining Simulator interaction gaps are recorded in section 9.
+Updated: 2026-10-05. This is the maintained project description, replacing the implementation plans. It records the agreed product, backend behavior, configuration and operating procedures. The backend and iPhone 13 Simulator launch/widget build were revalidated on the Mac mini; the remaining Simulator interaction gaps are recorded in section 9.
 
 ## 1. Purpose and components
 
@@ -80,11 +80,11 @@ Multiple user devices are supported. A shared, idempotent backend resolution ser
 
 ## 3. Bank capture rules
 
-Supported bank identifiers: `bidv`, `vietinbank`, `vietcombank`, `techcombank`. **MB Bank is excluded** because the example masks the owning account. Actual bank parser/package support still requires device fixtures and Android validation.
+Supported bank identifiers: `bidv`, `vietinbank`, `vietcombank`, `techcombank`. **MB Bank is excluded** because the example masks the owning account. BIDV and VietinBank have been validated against real Android notification payloads. Vietcombank and Techcombank remain gated until their current app notifications are validated on a device.
 
 Only successful VND transactions with an unmasked owning account can route to an enabled registry binding. Read the owning-account field, not a counterparty account found in transfer content. Never match suffixes or guess masked accounts. Ignore unregistered/ambiguous accounts, marketing, OTP, failed transactions, unsupported currencies and balances. Keep diagnostic counters/reason codes rather than raw unmatched notifications.
 
-The collector uses Android's notification listener and a persistent local queue, not an always-open Flutter screen. `accepted`, `duplicate` and `dropped` are terminal upload acknowledgments; `retry` keeps the collector queue item. Backend processing requires a valid collector epoch, active capture-enabled user, matching capture epoch, bank account and binding version.
+The collector uses Android's notification listener and a persistent local queue, not an always-open Flutter screen. When the listener reconnects, it also scans active notifications so an APK update or temporary process death does not lose notifications still present in the shade. Source keys and backend fingerprints make replay safe. `accepted`, `duplicate` and `dropped` are terminal upload acknowledgments; temporary failures retain the item with exponential backoff. A 401/403 clears the fenced collector credential and requires enrollment again. Backend processing requires a valid collector epoch, active capture-enabled user, matching capture epoch, bank account and binding version.
 
 Force-stop, revoked permissions, OEM battery restrictions and notifications never delivered to the listener can interrupt capture. Broker persistence cannot reconstruct bank notifications the collector never received.
 
@@ -201,8 +201,12 @@ All financial/admin access is authenticated and checked server-side. This is the
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, `APNS_PRIVATE_KEY_FILE` | Apple token-auth credentials/topic and path to private `.p8` key |
 | `FCM_ENABLED` | false until configured |
 | `FCM_PROJECT_ID`, `FCM_SERVICE_ACCOUNT_FILE` | Firebase project and private service-account JSON path |
+| `ANDROID_KEYSTORE_PATH` | Absolute path to the private Android release keystore; required by both apps for release builds |
+| `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Private release signing credentials; keep outside Git and back up with the keystore |
 
 Enabled push providers with missing configuration fail startup. APNs sends real HTTP/2 ES256-authenticated background requests; FCM uses OAuth and HTTP v1. Provider errors are retryable; known unregistered device tokens are removed. With both providers disabled, delivery is explicitly skipped, not simulated or claimed successful. Provider request contracts are tested with mocked HTTP responses; actual Apple/Firebase delivery requires credentials and device validation.
+
+Both Android apps deliberately reject release builds when the four signing variables are absent. Never publish a build signed with the Android debug certificate. Losing the production keystore prevents normal in-place updates, so keep an encrypted offline backup.
 
 Broker-only environment required by `deploy/nats/nats.conf`: `NATS_HOST`, `NATS_MONITOR_LISTEN`, `NATS_STORE_DIR`, `NATS_USER`, `NATS_PASSWORD`. Native defaults are supplied by the launchd template except its secret password. Monitoring has no authentication, so bind it to loopback. Compose binds broker/monitor ports to host loopback and uses container-local `/data/jetstream` backed by the named `nats_data` volume.
 
@@ -288,6 +292,8 @@ uv run pytest tests -q
 The isolated crash/persistence test requires a native `nats-server`; it uses private temporary ports, storage and test-only credentials, and skips explicitly if unavailable. Normal integration tests use the pinned NATS 2.10.20 container. The production config was also validated by that pinned server. The native crash test on this host uses NATS 2.14.6; neither is a macOS launchd test.
 
 Current backend checks cover ingestion and duplicate ACKs, lost publish ACK recovery, terminal-state protection, simultaneous resolutions and same-operation retries, stale capture recovery, purge during broker outage and without a sequence, payload hash rejection, snapshot drift, WebSocket delivery of a newly ingested event, sync resolution/replay, outbox lease/retry behavior, provider request contracts and file persistence after abrupt broker death.
+
+Physical Android verification on a Samsung SM-A546E confirmed the public HTTPS path for a BIDV `+444,444 VND` event: notification → collector parser → durable queue → collector API → JetStream-backed pending inbox → user app. The User App's Biến động tab now reads `/v1/pending-events`; it no longer reads the retired device-local bank inbox. A real VietinBank `+333,333 VND` payload exposed and now has regression coverage for VietinBank's current `VietinBank:dd/MM/yyyy HH:mm` layout. A second live VietinBank transfer is still required to reconfirm the full deployed path because the original notification was removed before the fixed collector could replay it.
 
 Latest backend run on the Mac mini: `uv run pytest tests -q` — **55 passed**, no skipped tests, in 6.45 seconds. This includes a regression test for fresh-install administrator bootstrap. One upstream Starlette/httpx deprecation warning remains. The suite used isolated PostgreSQL 17 on port 5433 and native NATS 2.15.0 on port 4222; it did not modify the Supabase cloud database. Migrations 001–005 were applied to the isolated UTF-8 database.
 
