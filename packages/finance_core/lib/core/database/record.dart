@@ -54,7 +54,11 @@ class Record {
 
   bool flag(String key) => data[key] == true;
   bool get deleted => data['deleted_at'] != null;
-  DateTime date(String key) => DateTime.parse(text(key)).toLocal();
+  DateTime date(String key) {
+    final val = text(key);
+    if (val.isEmpty) return DateTime.now();
+    return DateTime.tryParse(val)?.toLocal() ?? DateTime.now();
+  }
   Record patch(Map<String, dynamic> values) =>
       Record(entity, {...data, ...values});
   Map<String, dynamic> get change => {'table': entity.table, 'data': data};

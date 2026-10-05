@@ -115,6 +115,60 @@ void main() {
       expect(await sessionStore.getToken(), isNull);
     });
 
+    test('logout is idempotent when called with no token', () async {
+      final sessionStore = InMemorySessionStore();
+      var called = false;
+      final mockClient = MockClient((request) async {
+        called = true;
+        return http.Response('', 200);
+      });
+
+      final api = ApiClient(
+        baseUrl: 'http://localhost:8000/v1',
+        sessionStore: sessionStore,
+        httpClient: mockClient,
+      );
+
+      await api.logout();
+      expect(called, isFalse);
+      expect(await sessionStore.getToken(), isNull);
+    });
+
+    test('logout clears SessionStore even when server returns 401 Unauthorized', () async {
+      final sessionStore = InMemorySessionStore('expired_token');
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({'code': 'UNAUTHORIZED', 'message': 'Token expired'}),
+          401,
+        );
+      });
+
+      final api = ApiClient(
+        baseUrl: 'http://localhost:8000/v1',
+        sessionStore: sessionStore,
+        httpClient: mockClient,
+      );
+
+      await expectLater(api.logout(), completes);
+      expect(await sessionStore.getToken(), isNull);
+    });
+
+    test('logout clears SessionStore even when offline/network throws', () async {
+      final sessionStore = InMemorySessionStore('token_offline');
+      final mockClient = MockClient((request) async {
+        throw http.ClientException('Network is unreachable');
+      });
+
+      final api = ApiClient(
+        baseUrl: 'http://localhost:8000/v1',
+        sessionStore: sessionStore,
+        httpClient: mockClient,
+      );
+
+      await expectLater(api.logout(), completes);
+      expect(await sessionStore.getToken(), isNull);
+    });
+
     test('collector enrollment is explicit and never requests handover', () async {
       final sessionStore = InMemorySessionStore('admin_token');
       final mockClient = MockClient((request) async {

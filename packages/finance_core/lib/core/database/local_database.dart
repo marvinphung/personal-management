@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'record.dart';
+import 'package:uuid/uuid.dart';
 
 /// Drift owns SQLite connections/transactions. Domain JSON and durable outbox are
 /// separate, with indexed projected fields for pagination and calendar queries.
@@ -38,6 +39,20 @@ class LocalDatabase extends GeneratedDatabase {
     beforeOpen: (details) async {
       await customStatement('PRAGMA journal_mode=WAL');
       await customStatement('PRAGMA secure_delete=ON');
+
+      // Migration / self-healing: if legacy un-normalized data exists or format version is outdated,
+      // reset revision so next sync pulls a fresh snapshot and normalizes everything.
+      try {
+        final rows = await customSelect(
+          "SELECT value FROM metadata WHERE key = 'data_format_version'",
+        ).get();
+        if (rows.isEmpty || (int.tryParse(rows.first.read<String>('value')) ?? 0) < 2) {
+          await customStatement("DELETE FROM metadata WHERE key = 'revision'");
+          await customStatement(
+            "INSERT OR REPLACE INTO metadata(key, value) VALUES('data_format_version', '2')",
+          );
+        }
+      } catch (_) {}
     },
   );
   Future<void> put(Record record) => customStatement(
@@ -199,6 +214,8 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
         final cats = snapshot['categories'] as List;
         for (final cat in cats) {
           final data = Map<String, dynamic>.from(cat as Map);
+          final type = data['type'] ?? data['direction'];
+          if (type != null) data['type'] = type;
           await put(Record(Entity.categories, data));
         }
       }
@@ -213,17 +230,118 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
         }
       }
 
-      // 3. Transactions
+      // 3. Bank bindings
+      var bankBindingList = <Map<String, dynamic>>[];
+      if (snapshot.containsKey('bank_bindings')) {
+        await customStatement("DELETE FROM records WHERE entity = 'bank_bindings'");
+        final bindings = snapshot['bank_bindings'] as List;
+        for (final b in bindings) {
+          final data = Map<String, dynamic>.from(b as Map);
+          await put(Record(Entity.bankBindings, data));
+          bankBindingList.add(data);
+
+          // Ensure a matching Account exists for this bank binding in Entity.accounts
+          final bankCode = (data['bank_code'] ?? '').toString().toUpperCase();
+          final accNum = (data['account_number'] ?? '').toString();
+          final bindingId = data['id']?.toString() ?? '';
+          final accountName = accNum.isNotEmpty ? '$bankCode ($accNum)' : bankCode;
+
+          final existingAcc = await get(Entity.accounts, bindingId);
+          if (existingAcc == null) {
+            await put(Record(Entity.accounts, {
+              'id': bindingId,
+              'name': accountName,
+              'type': 'bank',
+              'currency': 'VND',
+              'opening_balance': 0,
+              'bank_code': data['bank_code'],
+              'account_number': accNum,
+              'is_archived': false,
+            }));
+          } else {
+            await put(existingAcc.patch({
+              'name': accountName,
+              'bank_code': data['bank_code'],
+              'account_number': accNum,
+            }));
+          }
+        }
+      } else {
+        final existingBindings = await list(Entity.bankBindings);
+        bankBindingList = existingBindings.map((r) => r.data).toList();
+      }
+
+      // 4. Transactions and transaction tags
       if (snapshot.containsKey('transactions')) {
         await customStatement("DELETE FROM records WHERE entity = 'transactions'");
+        await customStatement("DELETE FROM records WHERE entity = 'transaction_tags'");
         final txs = snapshot['transactions'] as List;
         for (final tx in txs) {
           final data = Map<String, dynamic>.from(tx as Map);
+          final txId = data['id'].toString();
+          final type = data['type'] ?? data['direction'] ?? 'expense';
+          final amount = data['amount'] ?? int.tryParse(data['amount_vnd']?.toString() ?? '') ?? 0;
+          final currency = data['currency'] ?? 'VND';
+          final desc = (data['description'] != null && data['description'].toString().isNotEmpty)
+              ? data['description'].toString()
+              : ((data['user_note'] != null && data['user_note'].toString().isNotEmpty)
+                  ? data['user_note'].toString()
+                  : (data['bank_description']?.toString() ?? ''));
+          data['type'] = type;
+          data['amount'] = amount;
+          data['currency'] = currency;
+          data['description'] = desc;
+          data['note'] = data['note'] ?? data['user_note'] ?? '';
+          data['purpose'] = data['purpose'] ?? 'normal';
+          data['created_at'] = data['created_at'] ?? data['occurred_at'] ?? DateTime.now().toUtc().toIso8601String();
+          data['updated_at'] = data['updated_at'] ?? data['occurred_at'] ?? DateTime.now().toUtc().toIso8601String();
+
+          if (data['occurred_at'] != null) {
+            final dt = DateTime.tryParse(data['occurred_at'].toString());
+            if (dt != null) {
+              data['occurred_at'] = dt.toUtc().toIso8601String();
+            }
+          }
+
+          // Link to account from bank bindings if missing
+          if ((data['account_id'] == null || data['account_id'].toString().isEmpty) && bankBindingList.isNotEmpty) {
+            final bankCode = (data['bank_code_snapshot'] ?? '').toString().toLowerCase();
+            final ownerAcc = (data['owner_account_snapshot'] ?? '').toString().replaceAll('.', '');
+            final matchingBinding = bankBindingList.firstWhere(
+              (b) {
+                final bCode = (b['bank_code'] ?? '').toString().toLowerCase();
+                final bNum = (b['account_number'] ?? '').toString();
+                if (bankCode.isNotEmpty && bCode != bankCode) return false;
+                if (ownerAcc.isNotEmpty) {
+                  return bNum.endsWith(ownerAcc) || ownerAcc.endsWith(bNum);
+                }
+                return bankCode.isNotEmpty && bCode == bankCode;
+              },
+              orElse: () => bankBindingList.first,
+            );
+            data['account_id'] = matchingBinding['id'].toString();
+          }
+
           await put(Record(Entity.transactions, data));
+
+          final tagIds = data['tag_ids'];
+          if (tagIds is List) {
+            for (final tagId in tagIds) {
+              final linkId = const Uuid().v5(
+                Namespace.url.value,
+                'finance:$txId:$tagId',
+              );
+              await put(Record(Entity.transactionTags, {
+                'id': linkId,
+                'transaction_id': txId,
+                'tag_id': tagId.toString(),
+              }));
+            }
+          }
         }
       }
 
-      // 4. Pending bank events with local undo/outbox overlay
+      // 5. Pending bank events with local undo/outbox overlay
       if (snapshot.containsKey('pending_bank_events')) {
         final hiddenIds = <String>{};
         final undoRaw = await metadata('active_undo_slot');
@@ -257,16 +375,6 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
             continue;
           }
           await put(Record(Entity.pendingBankEvents, data));
-        }
-      }
-
-      // 5. Bank bindings
-      if (snapshot.containsKey('bank_bindings')) {
-        await customStatement("DELETE FROM records WHERE entity = 'bank_bindings'");
-        final bindings = snapshot['bank_bindings'] as List;
-        for (final b in bindings) {
-          final data = Map<String, dynamic>.from(b as Map);
-          await put(Record(Entity.bankBindings, data));
         }
       }
 

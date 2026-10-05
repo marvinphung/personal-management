@@ -30,7 +30,7 @@ if not credentials.exists():
 
 creds_data = json.loads(credentials.read_text())
 password = creds_data['password']
-alias = creds_data.get('alias', 'finance-inbox')
+alias = creds_data.get('alias', 'quanlytao')
 env = dict(
     os.environ,
     ANDROID_KEYSTORE_PATH=str(keystore),

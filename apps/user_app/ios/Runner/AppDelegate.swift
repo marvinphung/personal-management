@@ -80,15 +80,22 @@ import WidgetKit
 
   }
 
+  func handleUrl(_ url: URL) {
+    if url.scheme == "quanlytao" && url.host == "bank-inbox" {
+      if let channel = widgetChannel {
+        channel.invokeMethod("onDeepLink", arguments: "/pending")
+      } else {
+        initialUrl = url
+      }
+    }
+  }
+
   override func application(
     _ app: UIApplication,
     open url: URL,
     options: [UIApplication.OpenURLOptionsKey: Any] = [:]
   ) -> Bool {
-    if url.scheme == "quanlytao" && url.host == "bank-inbox" {
-      widgetChannel?.invokeMethod("onDeepLink", arguments: "/pending")
-      return true
-    }
+    handleUrl(url)
     return super.application(app, open: url, options: options)
   }
 

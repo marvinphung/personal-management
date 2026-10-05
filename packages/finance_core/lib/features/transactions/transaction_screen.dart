@@ -77,7 +77,11 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
       width: 160,
       child: DropdownButtonFormField<String>(
         initialValue: value,
-        decoration: InputDecoration(labelText: title),
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: title,
+          isDense: true,
+        ),
         items: [
           DropdownMenuItem(value: '', child: Text(context.tr('All'))),
           for (final o in options)
@@ -412,12 +416,14 @@ class TransactionDetail extends ConsumerWidget {
                     .map((l) => '#${name(tags, l.text('tag_id'))}')
                     .join(' '),
                 context.tr('Note'): record.text('note'),
-                context.tr('Created'): DateFormat.yMMMd(
-                  context.languageCode,
-                ).add_Hm().format(record.date('created_at')),
-                context.tr('Updated'): DateFormat.yMMMd(
-                  context.languageCode,
-                ).add_Hm().format(record.date('updated_at')),
+                if (record.text('created_at').isNotEmpty)
+                  context.tr('Created'): DateFormat.yMMMd(
+                    context.languageCode,
+                  ).add_Hm().format(record.date('created_at')),
+                if (record.text('updated_at').isNotEmpty)
+                  context.tr('Updated'): DateFormat.yMMMd(
+                    context.languageCode,
+                  ).add_Hm().format(record.date('updated_at')),
               }.entries)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),

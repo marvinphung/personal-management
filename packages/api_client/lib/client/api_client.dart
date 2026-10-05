@@ -97,11 +97,17 @@ class ApiClient {
 
   Future<void> logout() async {
     try {
-      final res = await _httpClient.post(
+      final token = await sessionStore.getToken();
+      if (token == null || token.isEmpty) {
+        return;
+      }
+      await _httpClient.post(
         Uri.parse(_cleanUrl('/auth/logout')),
         headers: await _headers(),
       );
-      _handleError(res);
+      // Backend may return 200, or 401 if already expired/revoked. We do not throw on logout.
+    } catch (_) {
+      // Offline, network failure, or token already revoked.
     } finally {
       await sessionStore.clear();
     }

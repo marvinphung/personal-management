@@ -59,6 +59,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           _usernameController.text.trim(),
           _passwordController.text,
         );
+        ref.invalidate(sessionControllerProvider);
         ref.invalidate(currentUserProvider);
       }
     } on ApiException catch (e) {
@@ -95,6 +96,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         _oldPasswordController.text,
         _passwordController.text,
       );
+      ref.invalidate(sessionControllerProvider);
       ref.invalidate(currentUserProvider);
     } on ApiException catch (e) {
       if (mounted) {
@@ -133,8 +135,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await ref.read(authRepositoryProvider).signOut();
-              ref.invalidate(currentUserProvider);
+              await ref.read(workspaceProvider.notifier).signOut();
             },
           ),
         ],
@@ -161,6 +162,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('Kiểm tra trạng thái'),
                 onPressed: () {
+                  ref.invalidate(sessionControllerProvider);
                   ref.invalidate(currentUserProvider);
                 },
               ),

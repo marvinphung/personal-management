@@ -11,10 +11,12 @@ class SyncStatus extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final w = ref.watch(workspaceProvider).value,
         pending = ref.watch(pendingProvider).value ?? [];
-    if (w == null) return const SizedBox.shrink();
+    if (w == null || w.sync.stopped) return const SizedBox.shrink();
     return ListenableBuilder(
       listenable: w.sync,
-      builder: (context, _) => ListTile(
+      builder: (context, _) {
+        if (w.sync.stopped) return const SizedBox.shrink();
+        return ListTile(
         dense: true,
         leading: Icon(
           w.sync.error != null
@@ -44,7 +46,8 @@ class SyncStatus extends ConsumerWidget {
           onPressed: w.sync.busy ? null : w.sync.sync,
           icon: const Icon(Icons.refresh),
         ),
-      ),
+      );
+      },
     );
   }
 }
@@ -151,15 +154,9 @@ class SettingsScreen extends ConsumerWidget {
             if (okay != true) return;
 
             try {
-              await ref.read(authRepositoryProvider).signOut();
               await ref.read(workspaceProvider.notifier).signOut();
-              if (context.mounted) {
-                context.go('/login');
-              }
-            } catch (_) {
-              if (context.mounted) {
-                context.go('/login');
-              }
+            } catch (e) {
+              debugPrint('Logout error: $e');
             }
           },
           icon: const Icon(Icons.logout),

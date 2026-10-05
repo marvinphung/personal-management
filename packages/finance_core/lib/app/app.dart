@@ -8,6 +8,7 @@ import 'language.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'router.dart';
 import 'theme.dart';
+import 'widget_bridge.dart';
 import '../core/localization/app_language.dart';
 
 class FinanceApp extends ConsumerStatefulWidget {
@@ -20,7 +21,9 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
     with WidgetsBindingObserver {
   StreamSubscription<String>? _bankEvents;
   bool _openInbox = false;
+  String? _pendingDeepLink;
   bool _readingBalances = false;
+
   Future<void> _readBalances() async {
     if (_readingBalances || !BankDraftRepository.supported) return;
     _readingBalances = true;
@@ -51,10 +54,21 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
     }
   }
 
+  Future<void> _checkWidgetDeepLink() async {
+    final route = await UserWidgetBridge.getInitialRoute();
+    if (route != null && mounted) {
+      setState(() => _pendingDeepLink = route);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    UserWidgetBridge.setDeepLinkHandler((route) {
+      if (mounted) setState(() => _pendingDeepLink = route);
+    });
+    _checkWidgetDeepLink();
     if (BankDraftRepository.supported) {
       _bankEvents = ref.read(bankDraftRepositoryProvider).events.stream.listen((
         event,
@@ -69,6 +83,7 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
 
   @override
   void dispose() {
+    UserWidgetBridge.removeDeepLinkHandler();
     _bankEvents?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -87,6 +102,7 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
         _readBankIntent();
         _readBalances();
       }
+      _checkWidgetDeepLink();
     }
   }
 
@@ -97,13 +113,28 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
     if (BankDraftRepository.supported) ref.watch(workspaceProvider);
     final signedIn = ref.watch(sessionProvider) != null;
     final language = ref.watch(languageProvider);
-    if (_openInbox && signedIn && language != null) {
+
+    if (!signedIn) {
+      UserWidgetBridge.clearWidget();
+    }
+
+    ref.listen(pendingBankEventsProvider, (_, next) {
+      final count = next.value?.length ?? 0;
+      UserWidgetBridge.updateWidgetCount(count);
+    });
+
+    if ((_openInbox || _pendingDeepLink != null) && signedIn && language != null) {
+      final target = _pendingDeepLink ?? '/pending';
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_openInbox) return;
-        ref.read(routerProvider).go('/pending');
-        _openInbox = false;
+        if (!mounted) return;
+        ref.read(routerProvider).go(target);
+        setState(() {
+          _openInbox = false;
+          _pendingDeepLink = null;
+        });
       });
     }
+
     return MaterialApp.router(
       onGenerateTitle: (context) => context.tr('Personal Finance'),
       locale: ref.watch(localeProvider),

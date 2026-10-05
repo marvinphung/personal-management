@@ -13,9 +13,7 @@ final bankDraftRepositoryProvider = Provider<BankDraftRepository>((ref) {
 /// Only this adapter knows platform method names. Linux never invokes the channel.
 class BankDraftRepository {
   static bool get supported =>
-      const bool.fromEnvironment('BANK_INBOX_NATIVE_ENABLED') &&
-      !kIsWeb &&
-      defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   final MethodChannel channel;
   final events = StreamController<String>.broadcast();
   String? _owner;
@@ -30,12 +28,19 @@ class BankDraftRepository {
   }
   Future<void> setOwner(String? owner) async {
     if (!supported) return;
-    await channel.invokeMethod<void>('setOwner', {'owner': owner});
+    try {
+      await channel.invokeMethod<void>('setOwner', {'owner': owner});
+    } catch (_) {}
     _owner = owner;
   }
 
-  Future<T?> _call<T>(String method, [Map<String, dynamic> args = const {}]) =>
-      channel.invokeMethod<T>(method, {'owner': _owner, ...args});
+  Future<T?> _call<T>(String method, [Map<String, dynamic> args = const {}]) async {
+    try {
+      return await channel.invokeMethod<T>(method, {'owner': _owner, ...args});
+    } catch (_) {
+      return null;
+    }
+  }
   Future<List<BankDraft>> pending({int offset = 0}) async =>
       ((await _call<List>('pending', {'offset': offset})) ?? [])
           .map(

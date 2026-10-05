@@ -133,6 +133,14 @@ class SyncEngine extends ChangeNotifier {
     }
   }
 
+  @override
+  void notifyListeners() {
+    if (stopped) return;
+    try {
+      super.notifyListeners();
+    } catch (_) {}
+  }
+
   Future<void> stop() async {
     stopped = true;
     timer?.cancel();
@@ -144,6 +152,7 @@ class SyncEngine extends ChangeNotifier {
 
   @override
   void dispose() {
+    stopped = true;
     timer?.cancel();
     _realtimeSub?.cancel();
     _syncReqSub?.cancel();

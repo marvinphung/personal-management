@@ -1,7 +1,6 @@
 import '../features/bank_import/bank_draft_repository.dart';
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
@@ -14,6 +13,7 @@ import '../core/database/record.dart';
 import '../core/database/search_repository.dart';
 import '../core/sync/sync_engine.dart';
 import '../features/auth/auth_repository.dart';
+import 'widget_bridge.dart';
 
 import 'package:api_client/api_client.dart';
 import '../features/auth/secure_session_storage.dart';
@@ -44,19 +44,35 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(ref.watch(apiClientProvider));
 });
 
-final currentUserProvider = FutureProvider<UserDto?>((ref) async {
-  final auth = ref.watch(authRepositoryProvider);
-  final token = await ref.watch(sessionStoreProvider).getToken();
-  if (token == null) return null;
-  try {
-    return await auth.getCurrentUser();
-  } catch (_) {
-    return null;
+class SessionController extends AsyncNotifier<UserDto?> {
+  @override
+  Future<UserDto?> build() async {
+    final auth = ref.watch(authRepositoryProvider);
+    final token = await ref.watch(sessionStoreProvider).getToken();
+    if (token == null) return null;
+    try {
+      return await auth.getCurrentUser();
+    } catch (_) {
+      return null;
+    }
   }
+
+  void setSignedOut() {
+    state = const AsyncData(null);
+  }
+}
+
+final sessionControllerProvider =
+    AsyncNotifierProvider<SessionController, UserDto?>(
+  SessionController.new,
+);
+
+final currentUserProvider = FutureProvider<UserDto?>((ref) async {
+  return ref.watch(sessionControllerProvider.future);
 });
 
 final sessionProvider = Provider<UserDto?>((ref) {
-  return ref.watch(currentUserProvider).value;
+  return ref.watch(sessionControllerProvider).value;
 });
 
 final currentUserIdProvider = Provider<String?>((ref) {
@@ -156,6 +172,18 @@ class WorkspaceController extends AsyncNotifier<UserWorkspace?> {
             sync = SyncEngine(db, apiClient, realtimeClient: realtimeClient);
         _current = UserWorkspace(db, repository, sync);
         sync.start();
+        unawaited(() async {
+          try {
+            final token = await ref.read(sessionStoreProvider).getToken();
+            final baseUrl = ref.read(apiBaseUrlProvider);
+            if (token != null && token.isNotEmpty) {
+              await UserWidgetBridge.setWidgetCredentials(
+                token: token,
+                baseUrl: baseUrl,
+              );
+            }
+          } catch (_) {}
+        }());
         return _current;
 
       } catch (error, stackTrace) {
@@ -168,16 +196,33 @@ class WorkspaceController extends AsyncNotifier<UserWorkspace?> {
   }
 
   Future<void> signOut() async {
-    ++_generation;
+    final generation = ++_generation;
+    ref.read(sessionControllerProvider.notifier).setSignedOut();
     await _lifecycle.synchronized(() async {
-      await ref.read(bankDraftRepositoryProvider).setOwner(null);
+      try {
+        await UserWidgetBridge.clearWidget();
+      } catch (_) {}
+      try {
+        await ref.read(bankDraftRepositoryProvider).setOwner(null);
+      } catch (_) {}
       final current = _current;
       _current = null;
       if (current != null) await current.close(clear: true);
     });
-    await ref.read(authRepositoryProvider).signOut();
-    ref.invalidate(currentUserProvider);
-    ref.invalidateSelf();
+    try {
+      await ref.read(authRepositoryProvider).signOut();
+    } catch (e) {
+      debugPrint('Auth signOut error: $e');
+    }
+    try {
+      await ref.read(sessionStoreProvider).clear();
+    } catch (_) {}
+    if (generation == _generation) {
+      ref.invalidate(currentUserProvider);
+      ref.invalidate(pendingProvider);
+      ref.invalidate(balanceProvider);
+      ref.invalidateSelf();
+    }
   }
 }
 
