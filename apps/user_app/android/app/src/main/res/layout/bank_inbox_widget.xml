@@ -1,12 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/inbox_root" android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:gravity="center" android:padding="16dp" android:background="@drawable/inbox_background">
-    <TextView android:id="@+id/inbox_title" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="Finance Inbox" android:textColor="#E6EEF3" android:textSize="16sp" android:textStyle="bold"/>
-    <TextView android:id="@+id/inbox_count" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="0" android:textSize="36sp" android:textColor="#FFFFFF"/>
-    <TextView android:id="@+id/inbox_status" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="All caught up" android:textSize="14sp" android:textColor="#D2DCE3"/>
-    <TextView android:id="@+id/inbox_review" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:paddingTop="8dp" android:text="Review →" android:textSize="14sp" android:textColor="#A7DCCA"/>
+    android:id="@+id/inbox_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@drawable/inbox_background">
+
+    <!-- Header: Icon, Title & Stale Indicator -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/inbox_header_icon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📥"
+            android:textSize="13sp"
+            android:paddingEnd="6dp"/>
+
+        <TextView
+            android:id="@+id/inbox_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Biến động"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textAllCaps="true"/>
+
+        <TextView
+            android:id="@+id/inbox_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="●"
+            android:textSize="10sp"
+            android:textColor="@color/widget_warning"
+            android:visibility="gone"/>
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+
+    <!-- Count Display -->
+    <TextView
+        android:id="@+id/inbox_count"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="0"
+        android:textSize="38sp"
+        android:textColor="@color/widget_text_primary"
+        android:fontFamily="sans-serif-medium"
+        android:includeFontPadding="false"/>
+
+    <!-- Status description -->
+    <TextView
+        android:id="@+id/inbox_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="cần phân loại"
+        android:textSize="13sp"
+        android:textColor="@color/widget_text_secondary"
+        android:maxLines="2"
+        android:ellipsize="end"/>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+
+    <!-- Subtitle / Action hint -->
+    <TextView
+        android:id="@+id/inbox_review"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Chạm để mở ứng dụng"
+        android:textSize="11sp"
+        android:textColor="@color/widget_primary"/>
 </LinearLayout>

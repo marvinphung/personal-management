@@ -35,7 +35,21 @@ import WidgetKit
       case "updateWidgetCount":
         let args = call.arguments as? [String: Any]
         let count = args?["count"] as? Int ?? 0
+        let generation = args?["generation"] as? Int
+        let owner = args?["owner"] as? String
+        let currentGen = defaults?.integer(forKey: "session_generation") ?? 0
+        if let incomingGen = generation, incomingGen < currentGen {
+          result(true)
+          return
+        }
         defaults?.set(max(0, count), forKey: "pending_count")
+        if let generation = generation {
+          defaults?.set(generation, forKey: "session_generation")
+        }
+        if let owner = owner {
+          defaults?.set(owner, forKey: "session_owner")
+        }
+        defaults?.set(false, forKey: "is_stale")
         defaults?.set(Int64(Date().timeIntervalSince1970 * 1000), forKey: "last_updated_epoch_ms")
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadAllTimelines()
@@ -46,8 +60,17 @@ import WidgetKit
         let args = call.arguments as? [String: Any]
         let token = args?["token"] as? String ?? ""
         let baseUrl = args?["baseUrl"] as? String ?? ""
+        let generation = args?["generation"] as? Int
+        let owner = args?["owner"] as? String
         defaults?.set(token, forKey: "widget_token")
         defaults?.set(baseUrl, forKey: "base_url")
+        if let generation = generation {
+          defaults?.set(generation, forKey: "session_generation")
+        }
+        if let owner = owner {
+          defaults?.set(owner, forKey: "session_owner")
+        }
+        defaults?.set(false, forKey: "is_stale")
         defaults?.set(Int64(Date().timeIntervalSince1970 * 1000), forKey: "last_updated_epoch_ms")
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadAllTimelines()
@@ -60,6 +83,9 @@ import WidgetKit
         defaults?.removeObject(forKey: "base_url")
         defaults?.removeObject(forKey: "last_updated_epoch_ms")
         defaults?.removeObject(forKey: "last_error")
+        defaults?.removeObject(forKey: "session_generation")
+        defaults?.removeObject(forKey: "session_owner")
+        defaults?.removeObject(forKey: "is_stale")
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadAllTimelines()
         }

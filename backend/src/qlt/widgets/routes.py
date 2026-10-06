@@ -1,12 +1,12 @@
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
+
 from qlt.auth.routes import get_current_user
 from qlt.auth.sessions import (
     create_widget_token,
-    revoke_widget_token,
-    verify_session,
     verify_widget_token,
 )
 from qlt.config import get_settings
@@ -37,10 +37,10 @@ def get_widget_user(
         )
     token = authorization[len("Bearer ") :].strip()
 
-    # Allow either a dedicated widget token or a regular session token
+    # The home-screen widget persists this credential outside the main app's
+    # secure session store.  It must therefore be a short-lived, dedicated
+    # token that can access only this summary endpoint.
     user = verify_widget_token(token)
-    if not user:
-        user = verify_session(token)
 
     if not user:
         raise HTTPException(
@@ -72,12 +72,39 @@ def generate_widget_token(current_user: dict = Depends(get_current_user)):
 
 @router.delete("/widget-token")
 def delete_widget_token(
-    authorization: str | None = Header(None, alias="Authorization"),
+    token: str | None = None,
     current_user: dict = Depends(get_current_user),
 ):
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[len("Bearer ") :].strip()
-        revoke_widget_token(token)
+    settings = get_settings()
+    user_id = str(current_user["user_id"])
+    now = datetime.now(timezone.utc)
+
+    if token:
+        from qlt.auth.passwords import hash_token
+        token_hash = hash_token(token)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE {settings.database_schema}.widget_tokens
+                    SET revoked_at = %s
+                    WHERE user_id = %s AND token_hash = %s AND revoked_at IS NULL;
+                    """,
+                    (now, user_id, token_hash),
+                )
+            conn.commit()
+    else:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE {settings.database_schema}.widget_tokens
+                    SET revoked_at = %s
+                    WHERE user_id = %s AND revoked_at IS NULL;
+                    """,
+                    (now, user_id),
+                )
+            conn.commit()
     return {"status": "ok"}
 
 

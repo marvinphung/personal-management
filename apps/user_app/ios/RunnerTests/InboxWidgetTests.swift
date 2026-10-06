@@ -2,12 +2,17 @@ import XCTest
 import Foundation
 
 class InboxWidgetTests: XCTestCase {
+    private var testCache: WidgetCache!
+    private let testSuiteName = "group.app.quanlytao.user.test"
 
     override func setUp() {
         super.setUp()
+        testCache = WidgetCache(suiteName: testSuiteName)
+        testCache.clear()
     }
 
     override func tearDown() {
+        testCache.clear()
         super.tearDown()
     }
 
@@ -76,4 +81,31 @@ class InboxWidgetTests: XCTestCase {
         )
     }
 
+    func testWidgetCacheGenerationGuard() {
+        testCache.setWidgetCredentials(token: "test_token", baseUrl: "http://localhost", owner: "user_a", generation: 2)
+        testCache.setPendingCount(5, owner: "user_a", generation: 2)
+        XCTAssertEqual(testCache.getPendingCount(), 5)
+        XCTAssertFalse(testCache.isStale())
+
+        // Incoming update from older generation 1 must be ignored
+        testCache.setPendingCount(10, owner: "user_a", generation: 1)
+        XCTAssertEqual(testCache.getPendingCount(), 5)
+
+        // Incoming update with generation >= 2 must be accepted
+        testCache.setPendingCount(3, owner: "user_a", generation: 2)
+        XCTAssertEqual(testCache.getPendingCount(), 3)
+    }
+
+    func testWidgetCacheClearAndStale() {
+        testCache.setWidgetCredentials(token: "token_123", baseUrl: "https://example.com", owner: "user_1", generation: 1)
+        testCache.setPendingCount(7)
+        testCache.setStale(true)
+        XCTAssertTrue(testCache.isStale())
+        XCTAssertNotNil(testCache.getWidgetCredentials())
+
+        testCache.clear()
+        XCTAssertNil(testCache.getWidgetCredentials())
+        XCTAssertEqual(testCache.getPendingCount(), 0)
+        XCTAssertFalse(testCache.isStale())
+    }
 }

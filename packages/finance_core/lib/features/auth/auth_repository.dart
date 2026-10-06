@@ -13,8 +13,8 @@ class AuthRepository {
     return client.register(username, password);
   }
 
-  Future<void> signOut() {
-    return client.logout();
+  Future<void> signOut({String? tokenToRevoke}) {
+    return client.logout(tokenToRevoke: tokenToRevoke);
   }
 
   Future<UserDto> getCurrentUser() {

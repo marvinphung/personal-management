@@ -25,7 +25,7 @@ void main() {
         child: const CollectorApp(),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('Trạng thái thu thập'), findsOneWidget);
     expect(find.text('Trạng thái'), findsOneWidget);
@@ -35,17 +35,17 @@ void main() {
 
     // Switch to Người dùng tab
     await tester.tap(find.text('Người dùng'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('Quản lý người dùng'), findsOneWidget);
 
     // Switch to Ngân hàng tab
     await tester.tap(find.text('Ngân hàng'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('Cấu hình ngân hàng'), findsOneWidget);
 
     // Switch to Thiết bị tab
     await tester.tap(find.text('Thiết bị'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('Thiết bị & Chuyển giao'), findsOneWidget);
     expect(find.text('Đẩy hết'), findsNothing);
   });
@@ -62,7 +62,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     // Verify health metrics are shown
     expect(find.text('Quyền truy cập thông báo'), findsOneWidget);

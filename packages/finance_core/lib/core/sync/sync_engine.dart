@@ -49,8 +49,18 @@ class SyncEngine extends ChangeNotifier {
                   'version': e.version,
                 })
             .toList();
-        await db.applyInboxSnapshot(snapshot.inboxRevision, rawEvents);
-        notifyListeners();
+        _activeDbOps++;
+        try {
+          if (!stopped && !_disposed) {
+            await db.applyInboxSnapshot(snapshot.inboxRevision, rawEvents);
+            notifyListeners();
+          }
+        } finally {
+          _activeDbOps--;
+          if (_activeDbOps == 0 && _allDbOpsCompleted != null && !_allDbOpsCompleted!.isCompleted) {
+            _allDbOpsCompleted!.complete();
+          }
+        }
       });
 
       _syncReqSub = realtimeClient!.syncRequiredEvents.listen((_) {
@@ -59,9 +69,24 @@ class SyncEngine extends ChangeNotifier {
     }
   }
 
+  int _activeDbOps = 0;
+  Completer<void>? _allDbOpsCompleted;
+  bool _rerunNeeded = false;
+  bool _disposed = false;
+
   Future<void> sync() {
-    if (stopped) return Future.value();
-    return _flight ??= _run().whenComplete(() => _flight = null);
+    if (stopped || _disposed) return Future.value();
+    if (_flight != null) {
+      _rerunNeeded = true;
+      return _flight!;
+    }
+    return _flight = _run().whenComplete(() {
+      _flight = null;
+      if (_rerunNeeded && !stopped && !_disposed) {
+        _rerunNeeded = false;
+        unawaited(sync());
+      }
+    });
   }
 
   Future<void> _run() async {
@@ -135,27 +160,40 @@ class SyncEngine extends ChangeNotifier {
 
   @override
   void notifyListeners() {
-    if (stopped) return;
-    try {
-      super.notifyListeners();
-    } catch (_) {}
+    if (stopped || _disposed) return;
+    super.notifyListeners();
   }
 
   Future<void> stop() async {
     stopped = true;
     timer?.cancel();
-    _realtimeSub?.cancel();
-    _syncReqSub?.cancel();
+    timer = null;
+    await _realtimeSub?.cancel();
+    _realtimeSub = null;
+    await _syncReqSub?.cancel();
+    _syncReqSub = null;
     realtimeClient?.disconnect();
     await _flight;
+    if (_activeDbOps > 0) {
+      _allDbOpsCompleted ??= Completer<void>();
+      await _allDbOpsCompleted!.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {},
+      );
+    }
   }
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     stopped = true;
     timer?.cancel();
+    timer = null;
     _realtimeSub?.cancel();
+    _realtimeSub = null;
     _syncReqSub?.cancel();
+    _syncReqSub = null;
     realtimeClient?.disconnect();
     super.dispose();
   }

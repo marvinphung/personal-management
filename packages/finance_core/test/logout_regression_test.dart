@@ -37,7 +37,7 @@ class TestAuthRepository extends AuthRepository {
   Future<UserDto> getCurrentUser() async => mockUser;
 
   @override
-  Future<void> signOut() async {
+  Future<void> signOut({String? tokenToRevoke}) async {
     signOutCalls++;
     if (shouldThrowOnSignOut) {
       throw ApiException(
@@ -46,7 +46,7 @@ class TestAuthRepository extends AuthRepository {
         statusCode: 503,
       );
     }
-    await client.logout();
+    await client.logout(tokenToRevoke: tokenToRevoke);
   }
 }
 
@@ -60,7 +60,7 @@ void main() {
 
   final activeUser = UserDto(
     id: 'user-uuid-1',
-    username: 'pmv259',
+    username: 'synthetic_user_1',
     role: 'user',
     status: 'active',
     mustChangePassword: false,
@@ -95,10 +95,10 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    // Initial state: logged in
-    final user = await container.read(sessionControllerProvider.future);
+    // Initial state: wait for restore
+    final user = await container.read(currentUserProvider.future);
     expect(user, isNotNull);
-    expect(user?.username, 'pmv259');
+    expect(user?.username, 'synthetic_user_1');
     expect(container.read(sessionProvider), isNotNull);
 
     // Call signOut
@@ -120,7 +120,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    await container.read(sessionControllerProvider.future);
+    await container.read(currentUserProvider.future);
     expect(container.read(sessionProvider), isNotNull);
 
     // Call signOut multiple times
@@ -143,7 +143,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    await container.read(sessionControllerProvider.future);
+    await container.read(currentUserProvider.future);
     expect(container.read(sessionProvider), isNotNull);
 
     // Should not throw even when network/auth throws
@@ -156,6 +156,45 @@ void main() {
     expect(await sessionStore.getToken(), isNull);
   });
 
+  test('R2: Rapid login of User B during User A logout does NOT wipe User B token', () async {
+    final container = ProviderContainer(
+      overrides: [
+        sessionStoreProvider.overrideWithValue(sessionStore),
+        authRepositoryProvider.overrideWithValue(authRepo),
+        preferencesProvider.overrideWithValue(prefs),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(currentUserProvider.future);
+    expect(container.read(sessionProvider), isNotNull);
+
+    // Simulate User A logout started, but while in-flight User B logs in with new token
+    final userB = UserDto(
+      id: 'user-uuid-2',
+      username: 'synthetic_user_2',
+      role: 'user',
+      status: 'active',
+      mustChangePassword: false,
+      captureEnabled: true,
+    );
+
+    // When server signOut is called, pretend User B logs in concurrently.
+    authRepo.shouldThrowOnSignOut = false;
+
+    // Start signOut of User A
+    final signOutFuture = container.read(workspaceProvider.notifier).signOut();
+
+    // Concurrently User B saves new token
+    await sessionStore.saveToken('user_b_brand_new_token');
+    container.read(sessionControllerProvider.notifier).setAuthenticated(userB);
+
+    await signOutFuture;
+
+    // User B's token in sessionStore MUST NOT be wiped!
+    expect(await sessionStore.getToken(), 'user_b_brand_new_token');
+  });
+
   test('Router redirects to /login for all routes when signed out and permits access when signed in', () async {
     final container = ProviderContainer(
       overrides: [
@@ -166,7 +205,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    await container.read(sessionControllerProvider.future);
+    await container.read(currentUserProvider.future);
     final loggedInRouter = container.read(routerProvider);
 
     GoRouterState makeState(String path, GoRouter router) {

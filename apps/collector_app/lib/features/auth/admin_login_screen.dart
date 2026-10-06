@@ -1,10 +1,33 @@
 import 'package:api_client/api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 final collectorSessionStoreProvider = Provider<SessionStore>((ref) {
-  return InMemorySessionStore();
+  return CollectorSecureSessionStore();
 });
+
+/// Keeps the administrator session across process restarts without sharing it
+/// with the user-facing app. Android stores the value encrypted through the
+/// device keystore; it is removed only on an explicit logout (or if the server
+/// rejects an expired/revoked session).
+class CollectorSecureSessionStore implements SessionStore {
+  static const _tokenKey = 'qlt_collector_admin_session_token';
+
+  final FlutterSecureStorage _storage;
+
+  CollectorSecureSessionStore({FlutterSecureStorage? storage})
+      : _storage = storage ?? const FlutterSecureStorage();
+
+  @override
+  Future<void> saveToken(String token) => _storage.write(key: _tokenKey, value: token);
+
+  @override
+  Future<String?> getToken() => _storage.read(key: _tokenKey);
+
+  @override
+  Future<void> clear() => _storage.delete(key: _tokenKey);
+}
 
 final collectorApiBaseUrlProvider = Provider<String>((ref) {
   return const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:8000/v1');

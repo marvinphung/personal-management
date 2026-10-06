@@ -8,6 +8,7 @@ class TagChipPicker extends ConsumerWidget {
   final List<Record> allTags;
   final Set<String> selectedTagIds;
   final ValueChanged<Set<String>> onChanged;
+  final ValueChanged<String>? onCreated;
 
   const TagChipPicker({
     super.key,
@@ -15,6 +16,7 @@ class TagChipPicker extends ConsumerWidget {
     required this.allTags,
     required this.selectedTagIds,
     required this.onChanged,
+    this.onCreated,
   });
 
   @override
@@ -51,6 +53,7 @@ class TagChipPicker extends ConsumerWidget {
             if (created != null) {
               final newSet = Set<String>.from(selectedTagIds)..add(created.id);
               onChanged(newSet);
+              onCreated?.call(created.id);
             }
           },
         ),

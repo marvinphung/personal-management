@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:api_client/api_client.dart';
+import '../../app/providers.dart';
 import '../../core/database/finance_repository.dart';
 import '../../core/database/record.dart';
 import '../../core/utils/money.dart';
@@ -62,6 +64,7 @@ class _BankEventClassificationSheetState
     extends ConsumerState<BankEventClassificationSheet> {
   String? selectedCategoryId;
   Set<String> selectedTagIds = {};
+  final Set<String> locallyCreatedTagIds = {};
   final noteController = TextEditingController();
   bool showNoteField = false;
   bool busy = false;
@@ -95,17 +98,77 @@ class _BankEventClassificationSheetState
     });
 
     try {
+      await _ensureSelectedTagsAreAvailableRemotely();
       await widget.onAccept(
         selectedCategoryId!,
         selectedTagIds.toList(),
         noteController.text.trim(),
       );
       if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (mounted) setState(() => error = e.toString());
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          error = e.message.contains('Tag không thuộc danh mục')
+              ? 'Thẻ đã chọn chưa sẵn sàng. Vui lòng thử lại.'
+              : e.message;
+        });
+      }
+    } on FormatException catch (e) {
+      if (mounted) setState(() => error = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => error = 'Không thể duyệt biến động lúc này. Vui lòng thử lại.');
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  /// A tag created from this sheet is first persisted locally and then sent via
+  /// the outbox.  Accepting a bank event, however, uses the online API and
+  /// that API validates every tag ID immediately.  Drain just the relevant
+  /// create-tag operations before accepting so we never submit an ID which
+  /// only exists in SQLite.
+  Future<void> _ensureSelectedTagsAreAvailableRemotely() async {
+    final locallySelectedTagIds = locallyCreatedTagIds.intersection(selectedTagIds);
+    if (locallySelectedTagIds.isEmpty) return;
+
+    final workspace = await ref.read(workspaceProvider.future);
+    if (workspace == null) {
+      throw const FormatException('Đang chuẩn bị dữ liệu. Vui lòng thử lại.');
+    }
+
+    final pendingBeforeSync = await workspace.sync.outbox.getPending();
+    final localTagOperations = pendingBeforeSync.where(
+      (op) =>
+          op.type == 'create_tag' &&
+          locallySelectedTagIds.contains(op.payload['id'] as String? ?? ''),
+    ).toList();
+    if (localTagOperations.isEmpty) return;
+
+    await workspace.sync.sync();
+
+    final pendingAfterSync = await workspace.sync.outbox.getPending();
+    final failed = pendingAfterSync.where(
+      (op) =>
+          localTagOperations.any((created) => created.id == op.id) &&
+          op.error != null,
+    ).firstOrNull;
+    if (failed != null) {
+      throw const FormatException(
+        'Không thể lưu thẻ mới. Kiểm tra mạng rồi thử lại.',
+      );
+    }
+
+    final stillPending = pendingAfterSync.any(
+      (op) => localTagOperations.any((created) => created.id == op.id),
+    );
+    if (stillPending) {
+      throw const FormatException(
+        'Thẻ mới đang chờ đồng bộ. Vui lòng thử lại sau ít phút.',
+      );
+    }
+    locallyCreatedTagIds.removeAll(locallySelectedTagIds);
   }
 
   Future<void> _handleDiscard() async {
@@ -235,6 +298,7 @@ class _BankEventClassificationSheetState
                 allTags: widget.tags,
                 selectedTagIds: selectedTagIds,
                 onChanged: (tags) => setState(() => selectedTagIds = tags),
+                onCreated: (tagId) => setState(() => locallyCreatedTagIds.add(tagId)),
               ),
             ],
 

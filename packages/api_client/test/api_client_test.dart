@@ -206,5 +206,70 @@ void main() {
       expect(enrollment['collector_token'], 'one-time-token');
       expect(enrollment['handover_performed'], false);
     });
+
+    test('R2: logout does NOT clear new token if session was replaced by new login', () async {
+      final sessionStore = InMemorySessionStore('user_b_new_token');
+      final mockClient = MockClient((request) async {
+        expect(request.headers['Authorization'], 'Bearer user_a_old_token');
+        return http.Response('', 200);
+      });
+
+      final api = ApiClient(
+        baseUrl: 'http://localhost:8000/v1',
+        sessionStore: sessionStore,
+        httpClient: mockClient,
+      );
+
+      // User A's delayed logout finishes after User B already logged in
+      await api.logout(tokenToRevoke: 'user_a_old_token');
+
+      // User B's token MUST be preserved!
+      expect(await sessionStore.getToken(), 'user_b_new_token');
+    });
+
+    test('R4: createWidgetToken returns scoped widget token', () async {
+      final sessionStore = InMemorySessionStore('app_token');
+      final mockClient = MockClient((request) async {
+        expect(request.url.path, '/v1/widget-token');
+        expect(request.method, 'POST');
+        expect(request.headers['Authorization'], 'Bearer app_token');
+        return http.Response(
+          jsonEncode({
+            'token': 'scoped_widget_token_xyz',
+            'expires_at': '2026-12-31T23:59:59Z',
+          }),
+          200,
+        );
+      });
+
+      final api = ApiClient(
+        baseUrl: 'http://localhost:8000/v1',
+        sessionStore: sessionStore,
+        httpClient: mockClient,
+      );
+
+      final res = await api.createWidgetToken();
+      expect(res.token, 'scoped_widget_token_xyz');
+      expect(res.expiresAt, '2026-12-31T23:59:59Z');
+    });
+
+    test('R4: revokeWidgetToken sends DELETE request with token param', () async {
+      final sessionStore = InMemorySessionStore('app_token');
+      var deletedUrl = '';
+      final mockClient = MockClient((request) async {
+        expect(request.method, 'DELETE');
+        deletedUrl = request.url.toString();
+        return http.Response('', 200);
+      });
+
+      final api = ApiClient(
+        baseUrl: 'http://localhost:8000/v1',
+        sessionStore: sessionStore,
+        httpClient: mockClient,
+      );
+
+      await api.revokeWidgetToken(widgetToken: 'scoped_widget_token_xyz');
+      expect(deletedUrl, contains('/v1/widget-token?token=scoped_widget_token_xyz'));
+    });
   });
 }

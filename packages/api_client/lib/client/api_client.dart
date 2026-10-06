@@ -95,21 +95,52 @@ class ApiClient {
     return dto;
   }
 
-  Future<void> logout() async {
+  Future<void> logout({String? tokenToRevoke, Duration timeout = const Duration(seconds: 4)}) async {
+    final token = tokenToRevoke ?? await sessionStore.getToken();
+    if (token == null || token.isEmpty) {
+      return;
+    }
     try {
-      final token = await sessionStore.getToken();
-      if (token == null || token.isEmpty) {
-        return;
-      }
+      final headers = {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
       await _httpClient.post(
         Uri.parse(_cleanUrl('/auth/logout')),
-        headers: await _headers(),
-      );
+        headers: headers,
+      ).timeout(timeout);
       // Backend may return 200, or 401 if already expired/revoked. We do not throw on logout.
     } catch (_) {
-      // Offline, network failure, or token already revoked.
+      // Offline, network failure, timeout, or token already revoked.
     } finally {
-      await sessionStore.clear();
+      final currentToken = await sessionStore.getToken();
+      if (tokenToRevoke == null || currentToken == tokenToRevoke) {
+        await sessionStore.clear();
+      }
+    }
+  }
+
+  Future<WidgetTokenResponseDto> createWidgetToken() async {
+    final res = await _httpClient.post(
+      Uri.parse(_cleanUrl('/widget-token')),
+      headers: await _headers(),
+    );
+    _handleError(res);
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return WidgetTokenResponseDto.fromJson(data);
+  }
+
+  Future<void> revokeWidgetToken({String? widgetToken}) async {
+    try {
+      final url = widgetToken != null && widgetToken.isNotEmpty
+          ? _cleanUrl('/widget-token?token=${Uri.encodeQueryComponent(widgetToken)}')
+          : _cleanUrl('/widget-token');
+      await _httpClient.delete(
+        Uri.parse(url),
+        headers: await _headers(),
+      ).timeout(const Duration(seconds: 4));
+    } catch (_) {
+      // Offline or network failure on revoke is ignored
     }
   }
 

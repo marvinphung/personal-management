@@ -44,35 +44,118 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(ref.watch(apiClientProvider));
 });
 
-class SessionController extends AsyncNotifier<UserDto?> {
+enum AuthLifecycleState {
+  restoring,
+  authenticated,
+  signingOut,
+  signedOut,
+}
+
+class SessionState {
+  final AuthLifecycleState lifecycle;
+  final UserDto? user;
+  final int generation;
+
+  const SessionState({
+    required this.lifecycle,
+    this.user,
+    required this.generation,
+  });
+
+  bool get isAuthenticated => lifecycle == AuthLifecycleState.authenticated && user != null;
+  bool get isSigningOut => lifecycle == AuthLifecycleState.signingOut;
+  bool get isRestoring => lifecycle == AuthLifecycleState.restoring;
+  bool get isSignedOut => lifecycle == AuthLifecycleState.signedOut;
+}
+
+class SessionController extends AsyncNotifier<SessionState> {
+  int _generation = 0;
+
   @override
-  Future<UserDto?> build() async {
+  Future<SessionState> build() async {
+    final generation = ++_generation;
     final auth = ref.watch(authRepositoryProvider);
     final token = await ref.watch(sessionStoreProvider).getToken();
-    if (token == null) return null;
+    if (token == null || token.isEmpty) {
+      return SessionState(
+        lifecycle: AuthLifecycleState.signedOut,
+        generation: generation,
+      );
+    }
     try {
-      return await auth.getCurrentUser();
+      final user = await auth.getCurrentUser();
+      if (generation != _generation) {
+        return SessionState(
+          lifecycle: AuthLifecycleState.signedOut,
+          generation: generation,
+        );
+      }
+      return SessionState(
+        lifecycle: AuthLifecycleState.authenticated,
+        user: user,
+        generation: generation,
+      );
     } catch (_) {
-      return null;
+      return SessionState(
+        lifecycle: AuthLifecycleState.signedOut,
+        generation: generation,
+      );
     }
   }
 
+  void setAuthenticated(UserDto user) {
+    final generation = ++_generation;
+    state = AsyncData(SessionState(
+      lifecycle: AuthLifecycleState.authenticated,
+      user: user,
+      generation: generation,
+    ));
+  }
+
+  void startSignOut() {
+    final generation = ++_generation;
+    state = AsyncData(SessionState(
+      lifecycle: AuthLifecycleState.signingOut,
+      user: null,
+      generation: generation,
+    ));
+  }
+
+  void completeSignOut() {
+    state = AsyncData(SessionState(
+      lifecycle: AuthLifecycleState.signedOut,
+      user: null,
+      generation: _generation,
+    ));
+  }
+
   void setSignedOut() {
-    state = const AsyncData(null);
+    startSignOut();
+    completeSignOut();
   }
 }
 
 final sessionControllerProvider =
-    AsyncNotifierProvider<SessionController, UserDto?>(
+    AsyncNotifierProvider<SessionController, SessionState>(
   SessionController.new,
 );
 
+final sessionStateProvider = Provider<SessionState>((ref) {
+  return ref.watch(sessionControllerProvider).value ??
+      const SessionState(
+        lifecycle: AuthLifecycleState.restoring,
+        user: null,
+        generation: 0,
+      );
+});
+
 final currentUserProvider = FutureProvider<UserDto?>((ref) async {
-  return ref.watch(sessionControllerProvider.future);
+  final session = await ref.watch(sessionControllerProvider.future);
+  return session.user;
 });
 
 final sessionProvider = Provider<UserDto?>((ref) {
-  return ref.watch(sessionControllerProvider).value;
+  return ref.watch(sessionControllerProvider).value?.user;
 });
 
 final currentUserIdProvider = Provider<String?>((ref) {
@@ -174,15 +257,18 @@ class WorkspaceController extends AsyncNotifier<UserWorkspace?> {
         sync.start();
         unawaited(() async {
           try {
-            final token = await ref.read(sessionStoreProvider).getToken();
+            final widgetTokenDto = await apiClient.createWidgetToken();
+            if (generation != _generation) return;
             final baseUrl = ref.read(apiBaseUrlProvider);
-            if (token != null && token.isNotEmpty) {
-              await UserWidgetBridge.setWidgetCredentials(
-                token: token,
-                baseUrl: baseUrl,
-              );
-            }
-          } catch (_) {}
+            await UserWidgetBridge.setWidgetCredentials(
+              token: widgetTokenDto.token,
+              baseUrl: baseUrl,
+              owner: user,
+              generation: generation,
+            );
+          } catch (e) {
+            debugPrint('Failed to acquire scoped widget token: $e');
+          }
         }());
         return _current;
 
@@ -197,34 +283,61 @@ class WorkspaceController extends AsyncNotifier<UserWorkspace?> {
 
   Future<void> signOut() async {
     final generation = ++_generation;
-    ref.read(sessionControllerProvider.notifier).setSignedOut();
-    await _lifecycle.synchronized(() async {
+    final capturedToken = await ref.read(sessionStoreProvider).getToken();
+    ref.read(sessionControllerProvider.notifier).startSignOut();
+
+    try {
       try {
         await UserWidgetBridge.clearWidget();
       } catch (_) {}
+
       try {
         await ref.read(bankDraftRepositoryProvider).setOwner(null);
       } catch (_) {}
-      final current = _current;
-      _current = null;
-      if (current != null) await current.close(clear: true);
-    });
-    try {
-      await ref.read(authRepositoryProvider).signOut();
-    } catch (e) {
-      debugPrint('Auth signOut error: $e');
-    }
-    try {
-      await ref.read(sessionStoreProvider).clear();
-    } catch (_) {}
-    if (generation == _generation) {
-      ref.invalidate(currentUserProvider);
-      ref.invalidate(pendingProvider);
-      ref.invalidate(balanceProvider);
-      ref.invalidateSelf();
+
+      await _lifecycle.synchronized(() async {
+        final current = _current;
+        _current = null;
+        if (current != null) await current.close(clear: true);
+      });
+
+      try {
+        await ref.read(authRepositoryProvider).signOut(tokenToRevoke: capturedToken).timeout(
+          const Duration(seconds: 4),
+          onTimeout: () => debugPrint('Server signOut timed out'),
+        );
+      } catch (e) {
+        debugPrint('Auth signOut error: $e');
+      }
+    } finally {
+      try {
+        final currentToken = await ref.read(sessionStoreProvider).getToken();
+        if (currentToken == capturedToken || currentToken == null) {
+          await ref.read(sessionStoreProvider).clear();
+        }
+      } catch (e) {
+        debugPrint('Failed to clear session store: $e');
+      }
+
+      ref.read(sessionControllerProvider.notifier).completeSignOut();
+
+      if (generation == _generation) {
+        ref.invalidate(currentUserProvider);
+        ref.invalidate(pendingProvider);
+        ref.invalidate(balanceProvider);
+        ref.invalidateSelf();
+      }
     }
   }
 }
+
+final hasUnsyncedChangesProvider = FutureProvider<bool>((ref) async {
+  final state = ref.watch(workspaceProvider);
+  final ws = state.value;
+  if (ws == null) return false;
+  final cnt = await ws.db.pendingOutboxCount();
+  return cnt > 0;
+});
 
 final workspaceProvider =
     AsyncNotifierProvider<WorkspaceController, UserWorkspace?>(

@@ -8,6 +8,8 @@ class UserWidgetBridge {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  static bool _initialRouteConsumed = false;
+
   static Future<void> clearWidget() async {
     if (!isPlatformSupported) return;
     try {
@@ -17,10 +19,17 @@ class UserWidgetBridge {
     }
   }
 
-  static Future<void> updateWidgetCount(int count) async {
+  static Future<void> updateWidgetCount(
+    int count, {
+    String? owner,
+    int? generation,
+  }) async {
     if (!isPlatformSupported) return;
     try {
-      await _channel.invokeMethod('updateWidgetCount', {'count': count});
+      final args = <String, Object>{'count': count};
+      if (owner != null) args['owner'] = owner;
+      if (generation != null) args['generation'] = generation;
+      await _channel.invokeMethod('updateWidgetCount', args);
     } catch (e) {
       debugPrint('UserWidgetBridge.updateWidgetCount error: $e');
     }
@@ -29,22 +38,32 @@ class UserWidgetBridge {
   static Future<void> setWidgetCredentials({
     required String token,
     required String baseUrl,
+    String? owner,
+    int? generation,
   }) async {
     if (!isPlatformSupported) return;
     try {
-      await _channel.invokeMethod('setWidgetCredentials', {
+      final args = <String, Object>{
         'token': token,
         'baseUrl': baseUrl,
-      });
+      };
+      if (owner != null) args['owner'] = owner;
+      if (generation != null) args['generation'] = generation;
+      await _channel.invokeMethod('setWidgetCredentials', args);
     } catch (e) {
       debugPrint('UserWidgetBridge.setWidgetCredentials error: $e');
     }
   }
 
   static Future<String?> getInitialRoute() async {
-    if (!isPlatformSupported) return null;
+    if (!isPlatformSupported || _initialRouteConsumed) return null;
     try {
-      return await _channel.invokeMethod<String>('getInitialRoute');
+      final route = await _channel.invokeMethod<String>('getInitialRoute');
+      if (route != null && route.isNotEmpty) {
+        _initialRouteConsumed = true;
+        return route;
+      }
+      return null;
     } catch (e) {
       debugPrint('UserWidgetBridge.getInitialRoute error: $e');
       return null;

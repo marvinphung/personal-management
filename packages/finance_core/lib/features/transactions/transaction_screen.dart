@@ -2,7 +2,9 @@ import '../../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../app/components.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../app/widgets.dart';
 import '../../core/database/record.dart';
 import '../../core/utils/money.dart';
@@ -57,6 +59,7 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
   int sortColumn = 0;
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final categories =
             ref.watch(recordsProvider(Entity.categories)).value ?? [],
         tags = ref.watch(recordsProvider(Entity.tags)).value ?? [],
@@ -68,34 +71,6 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
         .where((l) => l.text('transaction_id') == t.id)
         .map((l) => '#${label(tags, l.text('tag_id'))}')
         .join(' ');
-    Widget filter(
-      String title,
-      String value,
-      List<(String, String)> options,
-      ValueChanged<String> change,
-    ) => SizedBox(
-      width: 160,
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        isExpanded: true,
-        decoration: InputDecoration(
-          labelText: title,
-          isDense: true,
-        ),
-        items: [
-          DropdownMenuItem(value: '', child: Text(context.tr('All'))),
-          for (final o in options)
-            DropdownMenuItem(
-              value: o.$1,
-              child: Text(o.$2, overflow: TextOverflow.ellipsis),
-            ),
-        ],
-        onChanged: (v) => setState(() {
-          change(v!);
-          visible = 50;
-        }),
-      ),
-    );
     return Column(
       children: [
         const MonthSelector(),
@@ -116,39 +91,135 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              spacing: 8,
-              children: [
-                filter(
-                  context.tr('Type'),
-                  type,
-                  TransactionType.values
-                      .map((v) => (v.name, context.tr(v.name)))
-                      .toList(),
-                  (v) => type = v,
+          child: Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      ChoiceChip(
+                        label: Text(context.tr('All')),
+                        selected: type.isEmpty,
+                        onSelected: (_) => setState(() {
+                          type = '';
+                          visible = 50;
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: Text(context.tr('Expense')),
+                        selected: type == 'expense',
+                        onSelected: (_) => setState(() {
+                          type = 'expense';
+                          visible = 50;
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: Text(context.tr('Income')),
+                        selected: type == 'income',
+                        onSelected: (_) => setState(() {
+                          type = 'income';
+                          visible = 50;
+                        }),
+                      ),
+                    ],
+                  ),
                 ),
-                filter(
-                  context.tr('Account'),
-                  account,
-                  accounts.map((r) => (r.id, r.text('name'))).toList(),
-                  (v) => account = v,
+              ),
+              const SizedBox(width: 8),
+              Badge(
+                isLabelVisible: category.isNotEmpty || tag.isNotEmpty || account.isNotEmpty,
+                child: IconButton.filledTonal(
+                  tooltip: context.tr('Filter'),
+                  icon: const Icon(Icons.filter_list_rounded),
+                  onPressed: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      builder: (ctx) => StatefulBuilder(
+                        builder: (ctx, setModalState) => SafeArea(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      context.tr('Filter transactions'),
+                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                    ),
+                                    if (category.isNotEmpty || tag.isNotEmpty || account.isNotEmpty)
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            category = '';
+                                            tag = '';
+                                            account = '';
+                                          });
+                                          Navigator.pop(ctx);
+                                        },
+                                        child: Text(context.tr('Reset')),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  initialValue: account.isEmpty ? null : account,
+                                  decoration: InputDecoration(labelText: context.tr('Account')),
+                                  items: [
+                                    DropdownMenuItem(value: '', child: Text(context.tr('All'))),
+                                    for (final a in accounts)
+                                      DropdownMenuItem(value: a.id, child: Text(a.text('name'))),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() => account = v ?? '');
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  initialValue: category.isEmpty ? null : category,
+                                  decoration: InputDecoration(labelText: context.tr('Category')),
+                                  items: [
+                                    DropdownMenuItem(value: '', child: Text(context.tr('All'))),
+                                    for (final c in categories)
+                                      DropdownMenuItem(value: c.id, child: Text(c.text('name'))),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() => category = v ?? '');
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  initialValue: tag.isEmpty ? null : tag,
+                                  decoration: InputDecoration(labelText: context.tr('Tag')),
+                                  items: [
+                                    DropdownMenuItem(value: '', child: Text(context.tr('All'))),
+                                    for (final tg in tags)
+                                      DropdownMenuItem(value: tg.id, child: Text(tg.text('name'))),
+                                  ],
+                                  onChanged: (v) {
+                                    setState(() => tag = v ?? '');
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: Text(context.tr('Apply')),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                filter(
-                  context.tr('Category'),
-                  category,
-                  categories.map((r) => (r.id, r.text('name'))).toList(),
-                  (v) => category = v,
-                ),
-                filter(
-                  context.tr('Tag'),
-                  tag,
-                  tags.map((r) => (r.id, r.text('name'))).toList(),
-                  (v) => tag = v,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -320,19 +391,53 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
                             style: Theme.of(context).textTheme.labelLarge,
                           ),
                         ),
-                      ListTile(
-                        title: Text(
-                          t.text('description').isEmpty
-                              ? context.tr(t.text('type'))
-                              : t.text('description'),
+                      Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: ListTile(
+                          leading: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: (t.text('type') == 'income' ? colors.income : colors.expense).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              t.text('type') == 'income'
+                                  ? Icons.arrow_downward_rounded
+                                  : (t.text('type') == 'expense'
+                                      ? Icons.arrow_upward_rounded
+                                      : Icons.swap_horiz_rounded),
+                              color: t.text('type') == 'income' ? colors.income : colors.expense,
+                              size: 18,
+                            ),
+                          ),
+                          title: Text(
+                            t.text('description').isEmpty
+                                ? context.tr(t.text('type'))
+                                : t.text('description'),
+                            style: TextStyle(fontWeight: FontWeight.w600, color: colors.textPrimary),
+                          ),
+                          subtitle: Text(
+                            '${label(categories, t.text('category_id'))} ${tagNames(t)}'.trim(),
+                            style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                          ),
+                          trailing: SizedBox(
+                            width: 132,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: MoneyText(
+                                  amountMinor: t.money('amount'),
+                                  currency: t.text('currency'),
+                                  direction: t.text('type'),
+                                ),
+                              ),
+                            ),
+                          ),
+                          onTap: () => showTransactionDetail(context, t),
                         ),
-                        subtitle: Text(
-                          '${label(categories, t.text('category_id'))} ${tagNames(t)}',
-                        ),
-                        trailing: Text(
-                          '${transactionSign(t)} ${Money.format(t.money('amount'), t.text('currency'))}',
-                        ),
-                        onTap: () => showTransactionDetail(context, t),
                       ),
                     ],
                   );

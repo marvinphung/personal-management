@@ -51,6 +51,7 @@ __pycache__/
 
 # Local signing credentials and distributable packages
 android/signing/
+apps/user_app/signing/
 *.apk
 *.deb
 

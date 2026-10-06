@@ -19,19 +19,24 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "updateWidgetCount" -> {
                     val count = call.argument<Int>("count") ?: 0
-                    WidgetCache.setPendingCount(this, count)
+                    val owner = call.argument<String>("owner")
+                    val generation = call.argument<Int>("generation") ?: 0
+                    WidgetCache.setPendingCount(this, count, owner, generation)
                     BankInboxWidget.update(this)
                     result.success(true)
                 }
                 "setWidgetCredentials" -> {
                     val token = call.argument<String>("token") ?: ""
                     val baseUrl = call.argument<String>("baseUrl") ?: ""
-                    WidgetCache.setWidgetCredentials(this, token, baseUrl)
+                    val owner = call.argument<String>("owner")
+                    val generation = call.argument<Int>("generation") ?: 0
+                    WidgetCache.setWidgetCredentials(this, token, baseUrl, owner, generation)
                     WidgetWorker.schedulePeriodic(this)
                     BankInboxWidget.update(this)
                     result.success(true)
                 }
                 "clearWidget" -> {
+                    WidgetWorker.cancelWork(this)
                     WidgetCache.clear(this)
                     BankInboxWidget.update(this)
                     result.success(true)
@@ -39,6 +44,8 @@ class MainActivity : FlutterActivity() {
                 "getInitialRoute" -> {
                     val uri = intent?.data
                     if (uri != null && uri.scheme == "quanlytao" && uri.host == "bank-inbox") {
+                        // Consume once to prevent looping redirects on resume
+                        intent?.data = null
                         result.success("/pending")
                     } else {
                         result.success(null)
@@ -54,6 +61,8 @@ class MainActivity : FlutterActivity() {
         setIntent(intent)
         val uri = intent.data
         if (uri != null && uri.scheme == "quanlytao" && uri.host == "bank-inbox") {
+            // Consume once
+            intent.data = null
             widgetChannel?.invokeMethod("onDeepLink", "/pending")
         }
     }

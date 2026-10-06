@@ -25,21 +25,23 @@ class WidgetTest {
         BankInboxWidget.update(context)
         val viewNotLoggedIn = manager.getViewFor(id)
         assertEquals("—", viewNotLoggedIn.findViewById<TextView>(R.id.inbox_count).text.toString())
-        assertEquals("Mở Quản lý Tao để đăng nhập", viewNotLoggedIn.findViewById<TextView>(R.id.inbox_status).text.toString())
+        assertEquals("Chưa đăng nhập", viewNotLoggedIn.findViewById<TextView>(R.id.inbox_status).text.toString())
+        assertEquals("Đăng nhập để xem →", viewNotLoggedIn.findViewById<TextView>(R.id.inbox_review).text.toString())
 
         // 2. Logged in, 0 pending
-        WidgetCache.setPendingCount(context, 0)
+        WidgetCache.setWidgetCredentials(context, "token", "http://localhost", "user", 1)
+        WidgetCache.setPendingCount(context, 0, generation = 1)
         BankInboxWidget.update(context)
         val viewZero = manager.getViewFor(id)
-        assertEquals("✓", viewZero.findViewById<TextView>(R.id.inbox_count).text.toString())
-        assertEquals("Không có giao dịch cần phân loại", viewZero.findViewById<TextView>(R.id.inbox_status).text.toString())
+        assertEquals("0", viewZero.findViewById<TextView>(R.id.inbox_count).text.toString())
+        assertEquals("Đã xử lý hết", viewZero.findViewById<TextView>(R.id.inbox_status).text.toString())
 
         // 3. Logged in, 5 pending
-        WidgetCache.setPendingCount(context, 5)
+        WidgetCache.setPendingCount(context, 5, generation = 1)
         BankInboxWidget.update(context)
         val viewFive = manager.getViewFor(id)
         assertEquals("5", viewFive.findViewById<TextView>(R.id.inbox_count).text.toString())
-        assertEquals("Có 5 giao dịch cần phân loại", viewFive.findViewById<TextView>(R.id.inbox_status).text.toString())
+        assertEquals("giao dịch cần phân loại", viewFive.findViewById<TextView>(R.id.inbox_status).text.toString())
 
         // 4. Tap root opens deep link quanlytao://bank-inbox
         viewFive.findViewById<android.view.View>(R.id.inbox_root).performClick()

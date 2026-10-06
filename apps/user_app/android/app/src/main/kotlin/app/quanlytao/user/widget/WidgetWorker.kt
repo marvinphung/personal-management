@@ -19,11 +19,17 @@ class WidgetWorker(
 ) : CoroutineWorker(appContext, params) {
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
         .build()
 
     override suspend fun doWork(): Result {
+        val startGeneration = WidgetCache.getGeneration(applicationContext)
+        if (!WidgetCache.isLoggedIn(applicationContext)) {
+            cancelWork(applicationContext)
+            return Result.success()
+        }
+
         val token = WidgetCache.getWidgetToken(applicationContext) ?: return Result.success()
         val baseUrl = WidgetCache.getApiBaseUrl(applicationContext)
         val url = if (baseUrl.endsWith("/")) "${baseUrl}widget/summary" else "$baseUrl/widget/summary"
@@ -37,25 +43,42 @@ class WidgetWorker(
 
         return try {
             httpClient.newCall(request).execute().use { response ->
+                // Check generation guard after network response
+                if (startGeneration != WidgetCache.getGeneration(applicationContext)) {
+                    // Discard response for older generation
+                    return Result.success()
+                }
+
                 when (response.code) {
                     200 -> {
                         val body = response.body?.string() ?: return Result.retry()
                         val json = JSONObject(body)
                         val count = if (json.has("count")) json.getInt("count") else json.optInt("pending_count", 0)
-                        WidgetCache.setPendingCount(applicationContext, count)
+                        WidgetCache.setPendingCount(
+                            applicationContext,
+                            count,
+                            generation = startGeneration,
+                        )
                         BankInboxWidget.update(applicationContext)
                         Result.success()
                     }
                     401, 403 -> {
-                        // Credential revoked
+                        // Credential revoked or expired
                         WidgetCache.clear(applicationContext)
+                        cancelWork(applicationContext)
                         BankInboxWidget.update(applicationContext)
                         Result.failure()
                     }
-                    else -> Result.retry()
+                    else -> {
+                        WidgetCache.markStale(applicationContext)
+                        BankInboxWidget.update(applicationContext)
+                        Result.retry()
+                    }
                 }
             }
         } catch (_: Exception) {
+            WidgetCache.markStale(applicationContext)
+            BankInboxWidget.update(applicationContext)
             Result.retry()
         }
     }
@@ -77,6 +100,12 @@ class WidgetWorker(
                 ExistingPeriodicWorkPolicy.KEEP,
                 workRequest,
             )
+        }
+
+        fun cancelWork(context: Context) {
+            try {
+                WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK_NAME)
+            } catch (_: Exception) {}
         }
     }
 }

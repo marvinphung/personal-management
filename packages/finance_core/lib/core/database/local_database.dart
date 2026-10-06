@@ -196,13 +196,37 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
   Future<void> applySnapshot(Map<String, dynamic> snapshot) async {
     final revision = snapshot['revision'] as int;
     await transaction(() async {
+      // Collect dirty records from outbox to preserve pending edits (R8)
+      final pendingOps = await pending();
+      final dirtyRecordMap = <String, Record>{};
+      for (final op in pendingOps) {
+        for (final r in op.rows) {
+          dirtyRecordMap['${r.entity.table}/${r.id}'] = r;
+        }
+      }
+
       // 0. Accounts
       if (snapshot.containsKey('accounts')) {
-        await customStatement("DELETE FROM records WHERE entity = 'accounts'");
+        final dirtyAccIds = dirtyRecordMap.values
+            .where((r) => r.entity == Entity.accounts)
+            .map((r) => r.id)
+            .toSet();
+        if (dirtyAccIds.isEmpty) {
+          await customStatement("DELETE FROM records WHERE entity = 'accounts'");
+        } else {
+          final placeholders = List.filled(dirtyAccIds.length, '?').join(',');
+          await customStatement(
+            "DELETE FROM records WHERE entity = 'accounts' AND id NOT IN ($placeholders)",
+            dirtyAccIds.toList(),
+          );
+        }
         final accounts = snapshot['accounts'] as List;
         for (final a in accounts) {
           final data = Map<String, dynamic>.from(a as Map);
+          final accId = data['id']?.toString() ?? '';
+          if (dirtyAccIds.contains(accId)) continue;
           if (data['deleted_at'] == null) {
+            data['is_archived'] = data['is_archived'] == true || data['archived'] == true;
             await put(Record(Entity.accounts, data));
           }
         }
@@ -210,22 +234,52 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
 
       // 1. Categories
       if (snapshot.containsKey('categories')) {
-        await customStatement("DELETE FROM records WHERE entity = 'categories'");
+        final dirtyCatIds = dirtyRecordMap.values
+            .where((r) => r.entity == Entity.categories)
+            .map((r) => r.id)
+            .toSet();
+        if (dirtyCatIds.isEmpty) {
+          await customStatement("DELETE FROM records WHERE entity = 'categories'");
+        } else {
+          final placeholders = List.filled(dirtyCatIds.length, '?').join(',');
+          await customStatement(
+            "DELETE FROM records WHERE entity = 'categories' AND id NOT IN ($placeholders)",
+            dirtyCatIds.toList(),
+          );
+        }
         final cats = snapshot['categories'] as List;
         for (final cat in cats) {
           final data = Map<String, dynamic>.from(cat as Map);
+          final catId = data['id']?.toString() ?? '';
+          if (dirtyCatIds.contains(catId)) continue;
           final type = data['type'] ?? data['direction'];
           if (type != null) data['type'] = type;
+          data['is_archived'] = data['is_archived'] == true || data['archived'] == true;
           await put(Record(Entity.categories, data));
         }
       }
 
       // 2. Tags
       if (snapshot.containsKey('tags')) {
-        await customStatement("DELETE FROM records WHERE entity = 'tags'");
+        final dirtyTagIds = dirtyRecordMap.values
+            .where((r) => r.entity == Entity.tags)
+            .map((r) => r.id)
+            .toSet();
+        if (dirtyTagIds.isEmpty) {
+          await customStatement("DELETE FROM records WHERE entity = 'tags'");
+        } else {
+          final placeholders = List.filled(dirtyTagIds.length, '?').join(',');
+          await customStatement(
+            "DELETE FROM records WHERE entity = 'tags' AND id NOT IN ($placeholders)",
+            dirtyTagIds.toList(),
+          );
+        }
         final tags = snapshot['tags'] as List;
         for (final tag in tags) {
           final data = Map<String, dynamic>.from(tag as Map);
+          final tagId = data['id']?.toString() ?? '';
+          if (dirtyTagIds.contains(tagId)) continue;
+          data['is_archived'] = data['is_archived'] == true || data['archived'] == true;
           await put(Record(Entity.tags, data));
         }
       }
@@ -273,14 +327,56 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
 
       // 4. Transactions and transaction tags
       if (snapshot.containsKey('transactions')) {
-        await customStatement("DELETE FROM records WHERE entity = 'transactions'");
-        await customStatement("DELETE FROM records WHERE entity = 'transaction_tags'");
+        final dirtyTxIds = dirtyRecordMap.values
+            .where((r) => r.entity == Entity.transactions)
+            .map((r) => r.id)
+            .toSet();
+        final dirtyTxTagIds = dirtyRecordMap.values
+            .where((r) => r.entity == Entity.transactionTags)
+            .map((r) => r.id)
+            .toSet();
+
+        if (dirtyTxIds.isEmpty) {
+          await customStatement("DELETE FROM records WHERE entity = 'transactions'");
+        } else {
+          final placeholders = List.filled(dirtyTxIds.length, '?').join(',');
+          await customStatement(
+            "DELETE FROM records WHERE entity = 'transactions' AND id NOT IN ($placeholders)",
+            dirtyTxIds.toList(),
+          );
+        }
+
+        if (dirtyTxIds.isEmpty && dirtyTxTagIds.isEmpty) {
+          await customStatement("DELETE FROM records WHERE entity = 'transaction_tags'");
+        } else {
+          final keptTxPlaceholders = dirtyTxIds.isNotEmpty ? List.filled(dirtyTxIds.length, '?').join(',') : "''";
+          final keptTagPlaceholders = dirtyTxTagIds.isNotEmpty ? List.filled(dirtyTxTagIds.length, '?').join(',') : "''";
+          await customStatement(
+            "DELETE FROM records WHERE entity = 'transaction_tags' AND id NOT IN ($keptTagPlaceholders) AND json_extract(payload, '\$.transaction_id') NOT IN ($keptTxPlaceholders)",
+            [...dirtyTxTagIds, ...dirtyTxIds],
+          );
+        }
+
         final txs = snapshot['transactions'] as List;
         for (final tx in txs) {
           final data = Map<String, dynamic>.from(tx as Map);
           final txId = data['id'].toString();
+          if (dirtyTxIds.contains(txId)) continue; // Keep local dirty record!
+
+          // R7: Strict amount parsing
+          final rawAmount = data['amount'] ?? data['amount_vnd'];
+          final int amount;
+          if (rawAmount is int) {
+            amount = rawAmount;
+          } else if (rawAmount is num) {
+            amount = rawAmount.toInt();
+          } else if (rawAmount is String && RegExp(r'^-?\d+$').hasMatch(rawAmount.trim())) {
+            amount = int.parse(rawAmount.trim());
+          } else {
+            throw FormatException('Invalid transaction amount in snapshot: $rawAmount (id: $txId)');
+          }
+
           final type = data['type'] ?? data['direction'] ?? 'expense';
-          final amount = data['amount'] ?? int.tryParse(data['amount_vnd']?.toString() ?? '') ?? 0;
           final currency = data['currency'] ?? 'VND';
           final desc = (data['description'] != null && data['description'].toString().isNotEmpty)
               ? data['description'].toString()
@@ -293,33 +389,50 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
           data['description'] = desc;
           data['note'] = data['note'] ?? data['user_note'] ?? '';
           data['purpose'] = data['purpose'] ?? 'normal';
-          data['created_at'] = data['created_at'] ?? data['occurred_at'] ?? DateTime.now().toUtc().toIso8601String();
-          data['updated_at'] = data['updated_at'] ?? data['occurred_at'] ?? DateTime.now().toUtc().toIso8601String();
 
+          // R7: Do not synthesize created_at or updated_at with occurred_at
+          if (data['created_at'] != null) {
+            final dt = DateTime.tryParse(data['created_at'].toString());
+            data['created_at'] = dt?.toUtc().toIso8601String();
+          }
+          if (data['updated_at'] != null) {
+            final dt = DateTime.tryParse(data['updated_at'].toString());
+            data['updated_at'] = dt?.toUtc().toIso8601String();
+          }
           if (data['occurred_at'] != null) {
             final dt = DateTime.tryParse(data['occurred_at'].toString());
-            if (dt != null) {
-              data['occurred_at'] = dt.toUtc().toIso8601String();
-            }
+            data['occurred_at'] = dt?.toUtc().toIso8601String();
           }
 
-          // Link to account from bank bindings if missing
-          if ((data['account_id'] == null || data['account_id'].toString().isEmpty) && bankBindingList.isNotEmpty) {
-            final bankCode = (data['bank_code_snapshot'] ?? '').toString().toLowerCase();
-            final ownerAcc = (data['owner_account_snapshot'] ?? '').toString().replaceAll('.', '');
-            final matchingBinding = bankBindingList.firstWhere(
-              (b) {
-                final bCode = (b['bank_code'] ?? '').toString().toLowerCase();
-                final bNum = (b['account_number'] ?? '').toString();
+          // R1: Infer account_id only when unique conclusive match
+          if (data['account_id'] != null && data['account_id'].toString().isNotEmpty) {
+            // Keep existing valid account_id
+          } else if (bankBindingList.isNotEmpty) {
+            final bankCode = (data['bank_code_snapshot'] ?? '').toString().trim().toLowerCase();
+            final ownerAcc = (data['owner_account_snapshot'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+
+            if (bankCode.isNotEmpty || ownerAcc.isNotEmpty) {
+              final matches = bankBindingList.where((b) {
+                final bCode = (b['bank_code'] ?? '').toString().trim().toLowerCase();
+                final bNum = (b['account_number'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
                 if (bankCode.isNotEmpty && bCode != bankCode) return false;
-                if (ownerAcc.isNotEmpty) {
+                if (ownerAcc.isNotEmpty && bNum.isNotEmpty) {
                   return bNum.endsWith(ownerAcc) || ownerAcc.endsWith(bNum);
                 }
+                if (ownerAcc.isNotEmpty && bNum.isEmpty) return false;
                 return bankCode.isNotEmpty && bCode == bankCode;
-              },
-              orElse: () => bankBindingList.first,
-            );
-            data['account_id'] = matchingBinding['id'].toString();
+              }).toList();
+
+              if (matches.length == 1) {
+                data['account_id'] = matches.first['id'].toString();
+              } else {
+                // Ambiguous or not matched: keep null, never guess
+                data['account_id'] = null;
+              }
+            } else {
+              // Manual transaction or missing bank snapshot: never assign bank account
+              data['account_id'] = null;
+            }
           }
 
           await put(Record(Entity.transactions, data));
@@ -432,6 +545,11 @@ WHERE a.entity='accounts' AND json_extract(a.payload,'\$.deleted_at') IS NULL GR
     'INSERT INTO metadata(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
     [key, value],
   );
+
+  Future<int> pendingOutboxCount() async {
+    final rows = await customSelect('SELECT COUNT(*) as cnt FROM outbox').get();
+    return rows.first.read<int>('cnt');
+  }
 
   Future<void> clearPrivate() async {
     await transaction(() async {

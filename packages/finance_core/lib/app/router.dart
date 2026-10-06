@@ -60,6 +60,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
           GoRoute(path: '/settings/banks', builder: (_, _) => const BankListScreen()),
+          GoRoute(path: '/settings/widget', builder: (_, _) => const WidgetSettingsScreen()),
           GoRoute(path: '/debts', builder: (_, _) => const DebtScreen()),
           GoRoute(path: '/notes', builder: (_, _) => const NotesScreen()),
           for (final entity in [

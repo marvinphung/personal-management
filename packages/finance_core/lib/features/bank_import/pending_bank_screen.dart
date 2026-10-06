@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:api_client/api_client.dart';
 import 'package:uuid/uuid.dart';
+import '../../app/components.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../app/widgets.dart';
 import '../../core/database/record.dart';
 import '../../core/localization/app_language.dart';
-import '../../core/utils/money.dart';
 import '../transactions/transaction_form.dart';
 import 'bank_confirmation.dart';
 import 'bank_draft.dart';
@@ -52,18 +53,27 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
           categories: categories,
           tags: tags,
           onAccept: (categoryId, tagIds, note) async {
+            final opId = const Uuid().v5(Namespace.url.value, 'accept:${event.id}');
+            final txId = const Uuid().v5(Namespace.url.value, 'tx:${event.id}');
             await ref.read(apiClientProvider).acceptPendingEvent(
               eventId: event.id,
-              operationId: const Uuid().v4(),
-              transactionId: const Uuid().v4(),
+              operationId: opId,
+              transactionId: txId,
               categoryId: categoryId,
               tagIds: tagIds,
               userNote: note,
             );
             ref.invalidate(pendingBankEventsProvider);
+            if (mounted) {
+              message(context, context.tr('Đã duyệt; đang cập nhật dữ liệu...'));
+            }
             final workspace = await ref.read(workspaceProvider.future);
             if (workspace != null) {
-              await workspace.sync.sync();
+              try {
+                await workspace.sync.sync();
+              } catch (_) {
+                // Background sync will retry
+              }
               ref.invalidate(monthTransactionsProvider);
               ref.invalidate(balanceProvider);
               ref.invalidate(recordsProvider(Entity.transactions));
@@ -72,9 +82,10 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
             }
           },
           onDiscard: () async {
+            final opId = const Uuid().v5(Namespace.url.value, 'discard:${event.id}');
             await ref.read(apiClientProvider).discardPendingEvent(
               eventId: event.id,
-              operationId: const Uuid().v4(),
+              operationId: opId,
             );
             ref.invalidate(pendingBankEventsProvider);
             final workspace = await ref.read(workspaceProvider.future);
@@ -99,9 +110,10 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
   Future<void> ignoreRemote(PendingBankEventDto event) async {
     setState(() => busy = true);
     try {
+      final opId = const Uuid().v5(Namespace.url.value, 'discard:${event.id}');
       await ref.read(apiClientProvider).discardPendingEvent(
         eventId: event.id,
-        operationId: const Uuid().v4(),
+        operationId: opId,
       );
       ref.invalidate(pendingBankEventsProvider);
       final workspace = await ref.read(workspaceProvider.future);
@@ -174,135 +186,411 @@ class _PendingBankScreenState extends ConsumerState<PendingBankScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final remoteAsync = ref.watch(pendingBankEventsProvider);
-    final localDrafts = ref.watch(bankDraftPageProvider(offset)).value ?? [];
+    final localAsync = ref.watch(bankDraftPageProvider(offset));
+    final localDrafts = localAsync.value ?? [];
     final remoteRows = remoteAsync.value ?? [];
     final hasRemote = remoteRows.isNotEmpty;
     final hasLocal = localDrafts.isNotEmpty;
     final totalCount = hasRemote ? remoteRows.length : localDrafts.length;
 
-    return Column(
-      children: [
-        ListTile(
-          title: Text(context.tr('Pending transactions')),
-          subtitle: Text(
-            hasRemote
-                ? 'Đồng bộ an toàn từ máy nhận thông báo ngân hàng.'
-                : context.tr(
-                    'Bank drafts stay on this Android device until you confirm.',
-                  ),
-          ),
-          trailing: Text(totalCount.toString()),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(pendingBankEventsProvider);
-              ref.invalidate(bankDraftPageProvider);
-              ref.invalidate(bankCountProvider);
-              await Future.wait([
-                ref.read(pendingBankEventsProvider.future).catchError((_) => <PendingBankEventDto>[]),
-                ref.read(bankDraftPageProvider(offset).future).catchError((_) => <BankDraft>[]),
-              ]);
-            },
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-              physics: const AlwaysScrollableScrollPhysics(),
+    final isLoading = (remoteAsync.isLoading && !remoteAsync.hasValue) && (localAsync.isLoading && !localAsync.hasValue);
+    final isError = remoteAsync.hasError && !remoteAsync.hasValue && !hasLocal;
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(pendingBankEventsProvider);
+        ref.invalidate(bankDraftPageProvider);
+        ref.invalidate(bankCountProvider);
+        await Future.wait([
+          ref.read(pendingBankEventsProvider.future).catchError((_) => <PendingBankEventDto>[]),
+          ref.read(bankDraftPageProvider(offset).future).catchError((_) => <BankDraft>[]),
+        ]);
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          // Header Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colors.bgSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.borderSubtle),
+            ),
+            child: Row(
               children: [
-                if (!hasRemote && !hasLocal)
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(context.tr('All caught up')),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: colors.primaryAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                if (hasRemote)
-                  for (final draft in remoteRows)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${draft.direction == 'income' ? '+' : draft.direction == 'expense' ? '−' : '?'}${Money.format(draft.amountVnd, 'VND')}',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            Text(
-                              '${draft.bankCode.toUpperCase()} · ${context.dateLabel(DateTime.parse(draft.occurredAt).toLocal(), time: true)}',
-                            ),
-                            if (draft.timeSource == 'notification_post_time')
-                              Text(
-                                context.tr(
-                                  'Time uses notification arrival; please review.',
-                                ),
-                              ),
-                            if (draft.bankDescription.isNotEmpty)
-                              Text(draft.bankDescription),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              alignment: WrapAlignment.end,
-                              children: [
-                                TextButton(
-                                  onPressed: busy ? null : () => ignoreRemote(draft),
-                                  child: Text(context.tr('Ignore')),
-                                ),
-                                const SizedBox(width: 8),
-                                FilledButton(
-                                  onPressed: busy ? null : () => reviewRemote(draft),
-                                  child: Text(context.tr('Review & confirm')),
-                                ),
-                              ],
-                            ),
-                          ],
+                  child: Icon(Icons.inbox_rounded, color: colors.primaryAccent, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.tr('Pending transactions'),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: colors.textPrimary,
                         ),
                       ),
-                    )
-                else if (hasLocal)
-                  for (final draft in localDrafts)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${draft.direction == 'income' ? '+' : draft.direction == 'expense' ? '−' : '?'}${Money.format(draft.amountMinor, draft.currency)}',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            Text(
-                              '${draft.bankName} · ${context.dateLabel(draft.occurredAt, time: true)}',
-                            ),
-                            if (draft.occurredAtSource == 'notification_post_time')
-                              Text(
-                                context.tr(
-                                  'Time uses notification arrival; please review.',
-                                ),
-                              ),
-                            if (draft.description.isNotEmpty)
-                              Text(draft.description),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              alignment: WrapAlignment.end,
-                              children: [
-                                TextButton(
-                                  onPressed: busy ? null : () => ignoreLocal(draft),
-                                  child: Text(context.tr('Ignore')),
-                                ),
-                                const SizedBox(width: 8),
-                                FilledButton(
-                                  onPressed: busy ? null : () => reviewLocal(draft),
-                                  child: Text(context.tr('Review & confirm')),
-                                ),
-                              ],
-                            ),
-                          ],
+                      const SizedBox(height: 2),
+                      Text(
+                        hasRemote
+                            ? 'Đồng bộ từ máy nhận thông báo ngân hàng.'
+                            : context.tr('Bank drafts stay on this Android device until you confirm.'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textSecondary,
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (totalCount > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: colors.primaryAccent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      totalCount.toString(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
+                  ),
               ],
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 16),
+
+          // Loading state
+          if (isLoading) ...[
+            Padding(
+              padding: const EdgeInsets.all(48),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(strokeWidth: 2.5, color: colors.primaryAccent),
+                    const SizedBox(height: 16),
+                    Text(
+                      context.tr('Đang tải danh sách biến động...'),
+                      style: TextStyle(fontSize: 13, color: colors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ]
+          // Error state
+          else if (isError) ...[
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_off_rounded, size: 48, color: colors.warning),
+                    const SizedBox(height: 14),
+                    Text(
+                      context.tr('Could not load bank notifications.'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: colors.textPrimary),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.tonalIcon(
+                      onPressed: () {
+                        ref.invalidate(pendingBankEventsProvider);
+                        ref.invalidate(bankDraftPageProvider);
+                      },
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: Text(context.tr('Retry')),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ]
+          // Empty state
+          else if (!hasRemote && !hasLocal) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: colors.primaryAccent.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.done_all_rounded, size: 32, color: colors.primaryAccent),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      context.tr('All caught up'),
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      context.tr('No pending transactions to review.'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ]
+          // Remote items
+          else if (hasRemote) ...[
+            for (final draft in remoteRows)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: colors.bgElevated,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: colors.borderSubtle),
+                            ),
+                            child: Text(
+                              draft.bankCode.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              context.dateLabel(DateTime.parse(draft.occurredAt).toLocal(), time: true),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      MoneyText(
+                        amountMinor: draft.amountVnd,
+                        currency: 'VND',
+                        direction: draft.direction,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (draft.bankDescription.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          draft.bankDescription,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                      if (draft.timeSource == 'notification_post_time') ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 13, color: colors.warning),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                context.tr('Time uses notification arrival; please review.'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colors.warning,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          TextButton(
+                            onPressed: busy ? null : () => ignoreRemote(draft),
+                            child: Text(
+                              context.tr('Ignore'),
+                              style: TextStyle(color: colors.textSecondary),
+                            ),
+                          ),
+                          FilledButton(
+                            onPressed: busy ? null : () => reviewRemote(draft),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: colors.primaryAccent,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: Text(context.tr('Review & confirm')),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ]
+          // Local items (Android device receiver)
+          else if (hasLocal) ...[
+            for (final draft in localDrafts)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: colors.bgElevated,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: colors.borderSubtle),
+                            ),
+                            child: Text(
+                              draft.bankName.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              context.dateLabel(draft.occurredAt, time: true),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      MoneyText(
+                        amountMinor: draft.amountMinor,
+                        currency: draft.currency,
+                        direction: draft.direction,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (draft.description.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          draft.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                      if (draft.occurredAtSource == 'notification_post_time') ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 13, color: colors.warning),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                context.tr('Time uses notification arrival; please review.'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colors.warning,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          TextButton(
+                            onPressed: busy ? null : () => ignoreLocal(draft),
+                            child: Text(
+                              context.tr('Ignore'),
+                              style: TextStyle(color: colors.textSecondary),
+                            ),
+                          ),
+                          FilledButton(
+                            onPressed: busy ? null : () => reviewLocal(draft),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: colors.primaryAccent,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: Text(context.tr('Review & confirm')),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
     );
   }
 }

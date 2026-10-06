@@ -31,11 +31,12 @@ public struct InboxTimelineProvider: TimelineProvider {
     public func getSnapshot(in context: Context, completion: @escaping (InboxEntry) -> Void) {
         let creds = WidgetCache.shared.getWidgetCredentials()
         let count = WidgetCache.shared.getPendingCount()
+        let isStale = WidgetCache.shared.isStale()
         let entry = InboxEntry(
             date: Date(),
             count: count,
             isLoggedIn: creds != nil,
-            isOffline: false
+            isOffline: isStale
         )
         completion(entry)
     }
@@ -57,8 +58,14 @@ public struct InboxTimelineProvider: TimelineProvider {
             case .success(let summary):
                 entry = InboxEntry(date: currentDate, count: summary.pendingCount, isLoggedIn: true, isOffline: false)
             case .failure:
-                let cachedCount = WidgetCache.shared.getPendingCount()
-                entry = InboxEntry(date: currentDate, count: cachedCount, isLoggedIn: true, isOffline: true)
+                let credsNow = WidgetCache.shared.getWidgetCredentials()
+                if credsNow == nil {
+                    entry = InboxEntry(date: currentDate, count: 0, isLoggedIn: false, isOffline: false)
+                } else {
+                    WidgetCache.shared.setStale(true)
+                    let cachedCount = WidgetCache.shared.getPendingCount()
+                    entry = InboxEntry(date: currentDate, count: cachedCount, isLoggedIn: true, isOffline: true)
+                }
             }
             let timeline = Timeline(entries: [entry], policy: .after(refreshDate))
             completion(timeline)

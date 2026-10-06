@@ -206,3 +206,20 @@ class WidgetSummaryDto {
     );
   }
 }
+
+class WidgetTokenResponseDto {
+  final String token;
+  final String expiresAt;
+
+  const WidgetTokenResponseDto({
+    required this.token,
+    required this.expiresAt,
+  });
+
+  factory WidgetTokenResponseDto.fromJson(Map<String, dynamic> json) {
+    return WidgetTokenResponseDto(
+      token: json['token'] as String? ?? '',
+      expiresAt: json['expires_at'] as String? ?? '',
+    );
+  }
+}

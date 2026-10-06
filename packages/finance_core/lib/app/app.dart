@@ -111,7 +111,9 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
     // Keep the native owner lifecycle active even while the login route is shown.
     // A restored signed-out session must stop capture and erase the old inbox.
     if (BankDraftRepository.supported) ref.watch(workspaceProvider);
-    final signedIn = ref.watch(sessionProvider) != null;
+    final session = ref.watch(sessionStateProvider);
+    final user = ref.watch(sessionProvider);
+    final signedIn = user != null;
     final language = ref.watch(languageProvider);
 
     if (!signedIn) {
@@ -119,8 +121,13 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
     }
 
     ref.listen(pendingBankEventsProvider, (_, next) {
+      if (user == null) return;
       final count = next.value?.length ?? 0;
-      UserWidgetBridge.updateWidgetCount(count);
+      UserWidgetBridge.updateWidgetCount(
+        count,
+        owner: user.id,
+        generation: session.user?.id == user.id ? session.generation : null,
+      );
     });
 
     if ((_openInbox || _pendingDeepLink != null) && signedIn && language != null) {

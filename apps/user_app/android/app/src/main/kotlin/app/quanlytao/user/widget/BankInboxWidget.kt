@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.View
 import android.widget.RemoteViews
 import app.quanlytao.user.MainActivity
 import app.quanlytao.user.R
@@ -24,22 +25,31 @@ class BankInboxWidget : AppWidgetProvider() {
 
             val isLoggedIn = WidgetCache.isLoggedIn(context)
             val count = WidgetCache.getPendingCount(context)
+            val isStale = WidgetCache.isStale(context)
 
             val views = RemoteViews(context.packageName, R.layout.bank_inbox_widget)
-            views.setTextViewText(R.id.inbox_title, "Quản lý Tao")
 
             if (!isLoggedIn) {
+                views.setTextViewText(R.id.inbox_header_icon, "🔒")
+                views.setTextViewText(R.id.inbox_title, "Quản lý Tao")
+                views.setViewVisibility(R.id.inbox_badge, View.GONE)
                 views.setTextViewText(R.id.inbox_count, "—")
-                views.setTextViewText(R.id.inbox_status, "Mở Quản lý Tao để đăng nhập")
-                views.setTextViewText(R.id.inbox_review, "Đăng nhập →")
+                views.setTextViewText(R.id.inbox_status, "Chưa đăng nhập")
+                views.setTextViewText(R.id.inbox_review, "Đăng nhập để xem →")
             } else if (count == 0) {
-                views.setTextViewText(R.id.inbox_count, "✓")
-                views.setTextViewText(R.id.inbox_status, "Không có giao dịch cần phân loại")
-                views.setTextViewText(R.id.inbox_review, "Mở ứng dụng →")
+                views.setTextViewText(R.id.inbox_header_icon, "✓")
+                views.setTextViewText(R.id.inbox_title, "Biến động")
+                views.setViewVisibility(R.id.inbox_badge, if (isStale) View.VISIBLE else View.GONE)
+                views.setTextViewText(R.id.inbox_count, "0")
+                views.setTextViewText(R.id.inbox_status, "Đã xử lý hết")
+                views.setTextViewText(R.id.inbox_review, if (isStale) "Chưa cập nhật · Mở app →" else "Mở Quản lý Tao →")
             } else {
+                views.setTextViewText(R.id.inbox_header_icon, "📥")
+                views.setTextViewText(R.id.inbox_title, "Biến động")
+                views.setViewVisibility(R.id.inbox_badge, if (isStale) View.VISIBLE else View.GONE)
                 views.setTextViewText(R.id.inbox_count, count.toString())
-                views.setTextViewText(R.id.inbox_status, "Có $count giao dịch cần phân loại")
-                views.setTextViewText(R.id.inbox_review, "Phân loại ngay →")
+                views.setTextViewText(R.id.inbox_status, "giao dịch cần phân loại")
+                views.setTextViewText(R.id.inbox_review, if (isStale) "Chưa cập nhật · Phân loại →" else "Phân loại ngay →")
             }
 
             // Deep link opens Biến động
