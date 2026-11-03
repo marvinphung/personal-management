@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Quản lý PMV</string>
+    <string name="calendar_widget_name">Lịch PMV</string>
+    <string name="calendar_widget_description">Xem lịch và sự kiện Google Calendar trên màn hình chính</string>
+    <string name="bank_widget_name">Biến động</string>
+</resources>

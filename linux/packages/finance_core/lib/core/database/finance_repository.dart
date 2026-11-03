@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:drift/drift.dart' show Variable;
 import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
-import '../utils/ledger.dart';
 import '../utils/money.dart';
 import '../utils/tag_name.dart';
 import 'local_database.dart';
@@ -184,6 +183,21 @@ class FinanceRepository {
       }
     }
     if (row.entity == Entity.transactions) {
+      final old = await db.get(Entity.transactions, row.id);
+      if (old?.data['bank_source'] != null && !row.deleted) {
+        for (final key in [
+          'amount',
+          'currency',
+          'type',
+          'description',
+          'occurred_at',
+          'bank_source',
+        ]) {
+          if (jsonEncode(old!.data[key]) != jsonEncode(row.data[key])) {
+            throw const FormatException('Thông tin gốc ngân hàng chỉ được đọc');
+          }
+        }
+      }
       final type = row.text('type');
       if (row.data['installment_group'] != null &&
           (type != 'expense' || row.text('purpose') != 'normal')) {
@@ -211,9 +225,20 @@ class FinanceRepository {
             row.data['to_account_id'] != null) {
           throw const FormatException('Invalid account selection');
         }
-        final account = await related(Entity.accounts, row.text('account_id'));
-        if (account.text('currency') != row.text('currency')) {
-          throw const FormatException('Account currency does not match');
+        final unassignedDebt =
+            row.data['account_id'] == null &&
+            const [
+              'debt_disbursement',
+              'debt_repayment',
+            ].contains(row.text('purpose'));
+        if (!unassignedDebt) {
+          final account = await related(
+            Entity.accounts,
+            row.text('account_id'),
+          );
+          if (account.text('currency') != row.text('currency')) {
+            throw const FormatException('Account currency does not match');
+          }
         }
       }
       if (row.data['category_id'] != null) {
@@ -249,11 +274,6 @@ class FinanceRepository {
       final debt = await related(Entity.debts, row.text('debt_id'));
       if (debt.text('status') == 'cancelled') {
         throw const FormatException('This debt is cancelled');
-      }
-      final payments = await db.list(Entity.debtPayments);
-      final other = payments.where((p) => p.id != row.id);
-      if (row.money('amount') > Ledger.remaining(debt, other)) {
-        throw const FormatException('Repayment exceeds the remaining debt');
       }
     }
   }

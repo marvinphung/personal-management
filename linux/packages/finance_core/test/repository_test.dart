@@ -169,13 +169,14 @@ void main() {
         DateTime.now(),
         'VND',
       );
-      expect(totals.income, 0);
-      expect(totals.expense, 0);
-      await expectLater(
-        service.repay(debt, 800000, account: account),
-        throwsFormatException,
+      expect(totals.income, 300000);
+      expect(totals.expense, 1000000);
+      await service.repay(debt, 800000, account: account);
+      expect(await db.list(Entity.debtPayments), hasLength(2));
+      expect(
+        Ledger.remaining(debt, await db.list(Entity.debtPayments)),
+        -100000,
       );
-      expect(await db.list(Entity.debtPayments), hasLength(1));
     },
   );
   test(

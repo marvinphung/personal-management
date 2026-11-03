@@ -37,7 +37,8 @@ class BankDraft {
         'amount': amountMinor,
         'currency': currency,
         'type': direction,
-        'description': '',
+        'description': description,
+        'bank_source': {'bank': bankCode, 'timeSource': occurredAtSource},
         'account_id': accountId,
         'occurred_at': occurredAt.toUtc().toIso8601String(),
       }, id: transactionId);

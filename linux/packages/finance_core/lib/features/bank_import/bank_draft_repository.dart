@@ -59,6 +59,13 @@ class BankDraftRepository {
     });
   }
 
+  Future<void> ignoreId(String owner, String id) {
+    if (owner != _owner) throw StateError('Session changed');
+    return _call<void>('finish', {'id': id, 'status': 'ignored'});
+  }
+
+  Future<void> refreshWidget() => _call<void>('refreshWidget');
+
   Future<void> reconnect() => _call<void>('reconnect');
   Future<void> openSettings() => _call<void>('openSettings');
   Future<bool> consumeOpenPending() async =>

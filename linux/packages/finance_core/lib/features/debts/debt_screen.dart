@@ -1,9 +1,12 @@
-import '../../core/localization/app_language.dart';
+import '../catalog/person_picker.dart';
+import '../../core/utils/money_input_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../app/widgets.dart';
 import '../../core/database/record.dart';
+import '../../core/localization/app_language.dart';
 import '../../core/utils/ledger.dart';
 import '../../core/utils/money.dart';
 import '../catalog/catalog_screen.dart';
@@ -11,28 +14,33 @@ import 'debt_service.dart';
 
 class DebtScreen extends ConsumerWidget {
   const DebtScreen({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currency = ref.watch(currencyProvider);
     final payments =
-            ref.watch(recordsProvider(Entity.debtPayments)).value ?? [],
-        people = ref.watch(recordsProvider(Entity.people)).value ?? [];
+        ref.watch(recordsProvider(Entity.debtPayments)).value ?? [];
+    final people = ref.watch(recordsProvider(Entity.people)).value ?? [];
+    final colors = context.colors;
+
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
               Expanded(
                 child: Text(
-                  context.tr('Keep promises clear'),
-                  style: Theme.of(context).textTheme.titleLarge,
+                  'Công nợ',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
               FilledButton.icon(
                 onPressed: () => showDebtForm(context),
                 icon: const Icon(Icons.add),
-                label: Text(context.tr('Debt')),
+                label: const Text('Tạo khoản nợ'),
               ),
             ],
           ),
@@ -43,72 +51,81 @@ class DebtScreen extends ConsumerWidget {
             builder: (debts) {
               if (debts.isEmpty) {
                 return EmptyState(
-                  title: context.tr('No debts to track'),
-                  description: context.tr(
-                    'Record money you lend or borrow, then add repayments.',
-                  ),
+                  title: 'Chưa có khoản công nợ nào',
+                  description:
+                      'Ghi lại các khoản cho vay hoặc vay nợ, sau đó thêm các lần thu/trả nợ.',
                   onAdd: () => showDebtForm(context),
                 );
               }
+
               int outstanding(String direction) => debts
                   .where(
                     (d) =>
                         d.text('currency') == currency &&
                         d.text('direction') == direction &&
-                        d.text('status') != 'cancelled',
+                        d.text('status') != 'cancelled' &&
+                        d.text('status') != 'completed',
                   )
                   .fold(0, (sum, d) => sum + Ledger.remaining(d, payments));
+
+              final sections = [
+                ('Cho vay (Người khác nợ tôi)', 'lent', false),
+                ('Vay nợ (Tôi nợ người khác)', 'borrowed', false),
+                ('Đã hoàn tất', '', true),
+              ];
+
               return ListView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 children: [
-                  for (final section in [
-                    'People owe me',
-                    'I owe',
-                    'Settled',
-                  ]) ...[
+                  for (final (title, dir, isCompleted) in sections) ...[
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                      child: Text(
-                        section == 'Settled'
-                            ? context.tr(section)
-                            : '${context.tr(section)} · ${Money.format(outstanding(section == "People owe me" ? "lent" : "borrowed"), currency)}',
-                        style: Theme.of(context).textTheme.titleMedium,
+                      padding: const EdgeInsets.only(top: 16, bottom: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            title.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                          if (!isCompleted)
+                            Text(
+                              Money.format(outstanding(dir), currency),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: dir == 'lent'
+                                    ? colors.income
+                                    : colors.expense,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     for (final d in debts.where((d) {
-                      final status = Ledger.debtStatus(d, payments),
-                          settled = status == 'paid' || status == 'cancelled';
-                      return section == 'Settled'
-                          ? settled
-                          : !settled &&
-                                (section == 'People owe me'
-                                    ? d.text('direction') == 'lent'
-                                    : d.text('direction') == 'borrowed');
-                    }))
-                      ListTile(
-                        leading: Icon(
-                          d.text('direction') == 'lent'
-                              ? Icons.call_received
-                              : Icons.call_made,
-                        ),
-                        title: Text(
-                          people
-                                  .where((p) => p.id == d.text('person_id'))
-                                  .firstOrNull
-                                  ?.text('name') ??
-                              context.tr('Person'),
-                        ),
-                        subtitle: Text(
-                          '${context.tr(Ledger.debtStatus(d, payments))} · ${d.data['due_at'] == null ? context.tr('No due date') : context.tr('Due {date}', {'date': context.dateLabel(d.date('due_at'))})}',
-                        ),
-                        trailing: Text(
-                          Money.format(
-                            Ledger.remaining(d, payments),
-                            d.text('currency'),
-                          ),
-                        ),
+                      final isDone =
+                          d.text('status') == 'completed' ||
+                          d.text('status') == 'paid' ||
+                          d.text('status') == 'cancelled';
+                      if (isCompleted) return isDone;
+                      return !isDone && d.text('direction') == dir;
+                    })) ...[
+                      _DebtCard(
+                        debt: d,
+                        payments: payments,
+                        people: people,
                         onTap: () => showDebtDetail(context, d),
                       ),
+                    ],
                   ],
+                  const SizedBox(height: 80),
                 ],
               );
             },
@@ -119,15 +136,106 @@ class DebtScreen extends ConsumerWidget {
   }
 }
 
-Future<void> showDebtForm(BuildContext context, {Record? debt}) =>
-    showDialog<void>(
-      context: context,
-      builder: (_) => DebtForm(debt: debt),
+class _DebtCard extends StatelessWidget {
+  final Record debt;
+  final List<Record> payments;
+  final List<Record> people;
+  final VoidCallback onTap;
+
+  const _DebtCard({
+    required this.debt,
+    required this.payments,
+    required this.people,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final personName =
+        people
+            .where((p) => p.id == debt.text('person_id'))
+            .firstOrNull
+            ?.text('name') ??
+        'Người liên quan';
+    final isLent = debt.text('direction') == 'lent';
+    final remaining = Ledger.remaining(debt, payments);
+    final isCompleted = debt.text('status') == 'completed';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: (isLent ? colors.income : colors.expense).withValues(
+              alpha: 0.1,
+            ),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            isLent ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+            color: isLent ? colors.income : colors.expense,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          personName,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: colors.textPrimary,
+          ),
+        ),
+        subtitle: Text(
+          isCompleted
+              ? 'Đã hoàn tất thủ công'
+              : (debt.data['due_at'] == null
+                    ? (isLent ? 'Cho vay' : 'Vay nợ')
+                    : 'Hạn: ${context.dateLabel(debt.date('due_at'))}'),
+          style: TextStyle(fontSize: 12, color: colors.textSecondary),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${remaining < 0 ? '−' : ''}${Money.format(remaining.abs(), debt.text('currency'))}',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: isCompleted
+                    ? colors.textMuted
+                    : (remaining < 0
+                          ? colors.warning
+                          : (isLent ? colors.income : colors.expense)),
+              ),
+            ),
+            Text(
+              'Gốc: ${Money.format(debt.money('principal_amount'), debt.text('currency'))}',
+              style: TextStyle(fontSize: 11, color: colors.textSecondary),
+            ),
+          ],
+        ),
+        onTap: onTap,
+      ),
     );
+  }
+}
+
+Future<void> showDebtForm(
+  BuildContext context, {
+  Record? debt,
+  bool edit = false,
+}) => showDialog<void>(
+  context: context,
+  builder: (_) => DebtForm(debt: debt, edit: edit),
+);
 
 class DebtForm extends ConsumerStatefulWidget {
   final Record? debt;
-  const DebtForm({super.key, this.debt});
+  final bool edit;
+  const DebtForm({super.key, this.debt, this.edit = false});
   @override
   ConsumerState<DebtForm> createState() => _DebtFormState();
 }
@@ -136,8 +244,28 @@ class _DebtFormState extends ConsumerState<DebtForm> {
   final amount = TextEditingController(), note = TextEditingController();
   String? person, account, error;
   DebtDirection direction = DebtDirection.lent;
-  bool busy = false;
+  bool busy = false, initialized = false;
   DateTime? due;
+  DateTime occurred = DateTime.now();
+  bool get principalForm => widget.debt == null || widget.edit;
+
+  @override
+  void initState() {
+    super.initState();
+    final d = widget.debt;
+    if (widget.edit && d != null) {
+      amount.text = Money.groupedInput(
+        d.money('principal_amount'),
+        d.text('currency'),
+      );
+      note.text = d.text('note');
+      occurred = d.date('started_at');
+      person = d.text('person_id');
+      direction = DebtDirection.values.byName(d.text('direction'));
+      if (d.data['due_at'] != null) due = d.date('due_at');
+    }
+  }
+
   @override
   void dispose() {
     amount.dispose();
@@ -155,15 +283,29 @@ class _DebtFormState extends ConsumerState<DebtForm> {
         final service = DebtService(repo),
             cash = accounts.where((a) => a.id == account).firstOrNull;
         final String currency =
-            widget.debt?.text('currency') ??
-            cash?.text('currency') ??
-            ref.read(currencyProvider);
+            widget.debt?.text('currency') ?? cash?.text('currency') ?? 'VND';
         final value = Money.parse(amount.text, currency: currency);
-        if (widget.debt != null) {
+        if (widget.edit) {
+          final p = people.where((p) => p.id == person).firstOrNull;
+          if (p == null) {
+            throw const FormatException('Create or select a person first');
+          }
+          await service.updateDebt(
+            widget.debt!,
+            person: p,
+            direction: direction,
+            amount: value,
+            account: cash,
+            due: due,
+            note: note.text,
+            startedAt: occurred,
+          );
+        } else if (widget.debt != null) {
           await service.repay(
             widget.debt!,
             value,
             account: cash,
+            paidAt: occurred,
             note: note.text,
           );
         } else {
@@ -178,6 +320,7 @@ class _DebtFormState extends ConsumerState<DebtForm> {
             currency: currency,
             account: cash,
             due: due,
+            startedAt: occurred,
             note: note.text,
           );
         }
@@ -194,81 +337,123 @@ class _DebtFormState extends ConsumerState<DebtForm> {
   Widget build(BuildContext context) {
     final people = ref.watch(recordsProvider(Entity.people)).value ?? [],
         accounts = (ref.watch(recordsProvider(Entity.accounts)).value ?? [])
-            .where(
-              (a) =>
-                  !a.flag('is_archived') &&
-                  (widget.debt == null ||
-                      a.text('currency') == widget.debt!.text('currency')),
-            )
+            .where((a) => !a.flag('is_archived') || widget.edit)
             .toList();
+
+    final movements =
+        ref.watch(recordsProvider(Entity.transactions)).value ?? <Record>[];
+    final original = movements
+        .where((t) => t.id == widget.debt?.text('linked_transaction_id'))
+        .firstOrNull;
+    if (widget.edit && !initialized && original != null) {
+      account = original.data['account_id'];
+      initialized = true;
+    }
+    final bankReadOnly = widget.edit && original?.data['bank_source'] != null;
+    final hasPayments =
+        (ref.watch(recordsProvider(Entity.debtPayments)).value ?? <Record>[])
+            .any((p) => p.text('debt_id') == widget.debt?.id);
     return FormDialog(
-      title: widget.debt == null
-          ? context.tr('Record a debt')
-          : context.tr('Record repayment'),
+      title: widget.edit
+          ? 'Chỉnh sửa công nợ'
+          : widget.debt == null
+          ? (direction == DebtDirection.lent
+                ? 'Tạo khoản cho vay'
+                : 'Tạo khoản vay nợ')
+          : (widget.debt!.text('direction') == 'lent'
+                ? 'Ghi nhận thu nợ'
+                : 'Ghi nhận trả nợ'),
       busy: busy,
       error: error,
       save: () => save(people, accounts),
       children: [
-        TextField(
-          controller: amount,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: context.tr('Amount'),
-            hintText: '1m',
-          ),
-        ),
-        if (widget.debt == null) ...[
-          SegmentedButton<DebtDirection>(
-            segments: [
-              ButtonSegment(
+        if (principalForm)
+          DropdownButtonFormField<DebtDirection>(
+            initialValue: direction,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Loại công nợ'),
+            items: const [
+              DropdownMenuItem(
                 value: DebtDirection.lent,
-                label: Text(context.tr('I lent')),
+                child: Text('Cho vay'),
               ),
-              ButtonSegment(
+              DropdownMenuItem(
                 value: DebtDirection.borrowed,
-                label: Text(context.tr('I borrowed')),
+                child: Text('Vay nợ'),
               ),
             ],
-            selected: {direction},
-            onSelectionChanged: (v) => setState(() => direction = v.first),
+            onChanged: bankReadOnly || hasPayments
+                ? null
+                : (v) => setState(() => direction = v!),
           ),
-          RecordPicker(
-            label: context.tr('Person'),
+        if (principalForm)
+          PersonPicker(
+            label: context.tr('Người liên quan'),
             value: person,
             records: people,
             onChanged: (v) => setState(() => person = v),
           ),
-          TextButton.icon(
-            onPressed: () => showCatalogForm(context, Entity.people),
-            icon: const Icon(Icons.person_add_alt),
-            label: Text(context.tr('Add person')),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(principalForm ? 'Ngày giao dịch' : 'Ngày thu/trả nợ'),
+          subtitle: Text(context.dateLabel(occurred)),
+          trailing: const Icon(Icons.calendar_today),
+          onTap: bankReadOnly
+              ? null
+              : () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: occurred,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null && mounted) {
+                    setState(
+                      () => occurred = DateTime(
+                        picked.year,
+                        picked.month,
+                        picked.day,
+                        occurred.hour,
+                        occurred.minute,
+                        occurred.second,
+                        occurred.millisecond,
+                        occurred.microsecond,
+                      ),
+                    );
+                  }
+                },
+        ),
+        TextField(
+          controller: amount,
+          readOnly: bankReadOnly,
+          inputFormatters: [MoneyInputFormatter(allowNegative: false)],
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: principalForm ? 'Số tiền gốc' : 'Số tiền trả',
+            suffixText: accounts.firstOrNull?.text('currency') ?? 'VND',
           ),
-        ],
+          autofocus: true,
+        ),
         RecordPicker(
-          label: context.tr('Cash account (optional)'),
+          label: 'Tài khoản thanh toán',
           value: account,
           records: accounts,
-          onChanged: (v) => setState(() => account = v),
+          onChanged: bankReadOnly ? null : (v) => setState(() => account = v),
           optional: true,
         ),
-        Text(
-          context.tr(
-            'Choosing an account also records the cash movement. Debt principal is excluded from normal income and spending.',
-          ),
-        ),
-        if (widget.debt == null)
-          TextButton.icon(
-            icon: const Icon(Icons.calendar_today),
-            label: Text(
-              due == null
-                  ? context.tr('Set due date')
-                  : context.tr('Due {date}', {'date': context.dateLabel(due!)}),
+        if (principalForm)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Hạn trả (tuỳ chọn)'),
+            subtitle: Text(
+              due == null ? 'Không có hạn' : context.dateLabel(due!),
             ),
-            onPressed: () async {
+            trailing: const Icon(Icons.calendar_today),
+            onTap: () async {
               final d = await showDatePicker(
                 context: context,
-                initialDate: DateTime.now(),
+                initialDate:
+                    due ?? DateTime.now().add(const Duration(days: 30)),
                 firstDate: DateTime(2000),
                 lastDate: DateTime(2100),
               );
@@ -277,9 +462,9 @@ class _DebtFormState extends ConsumerState<DebtForm> {
           ),
         TextField(
           controller: note,
-          minLines: 2,
-          maxLines: 4,
-          decoration: InputDecoration(labelText: context.tr('Note')),
+          minLines: 1,
+          maxLines: 3,
+          decoration: const InputDecoration(labelText: 'Ghi chú (tuỳ chọn)'),
         ),
       ],
     );
@@ -295,19 +480,26 @@ Future<void> showDebtDetail(BuildContext context, Record debt) =>
 class DebtDetail extends ConsumerWidget {
   final Record debt;
   const DebtDetail({super.key, required this.debt});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final debt =
+        (ref.watch(recordsProvider(Entity.debts)).value ?? <Record>[])
+            .where((d) => d.id == this.debt.id)
+            .firstOrNull ??
+        this.debt;
     final payments =
         (ref.watch(recordsProvider(Entity.debtPayments)).value ?? [])
             .where((p) => p.text('debt_id') == debt.id)
             .toList()
           ..sort((a, b) => b.text('paid_at').compareTo(a.text('paid_at')));
     final left = Ledger.remaining(debt, payments);
+    final isCompleted = debt.text('status') == 'completed';
+    final colors = context.colors;
+
     return AlertDialog(
       title: Text(
-        debt.text('direction') == 'lent'
-            ? context.tr('Money lent')
-            : context.tr('Money borrowed'),
+        debt.text('direction') == 'lent' ? 'Khoản cho vay' : 'Khoản vay nợ',
       ),
       content: SizedBox(
         width: 520,
@@ -317,34 +509,68 @@ class DebtDetail extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                Money.format(left, debt.text('currency')),
-                style: Theme.of(context).textTheme.headlineMedium,
+                '${left < 0 ? '−' : ''}${Money.format(left.abs(), debt.text('currency'))}',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isCompleted
+                      ? colors.textMuted
+                      : (left < 0
+                            ? colors.warning
+                            : (debt.text('direction') == 'lent'
+                                  ? colors.income
+                                  : colors.expense)),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Ngày giao dịch: ${context.dateLabel(debt.date('started_at'))}',
               ),
               Text(
-                context.tr('Remaining · Principal {amount}', {
-                  'amount': Money.format(
-                    debt.money('principal_amount'),
-                    debt.text('currency'),
-                  ),
-                }),
+                'Còn lại · Gốc: ${Money.format(debt.money('principal_amount'), debt.text('currency'))}',
+                style: TextStyle(color: colors.textSecondary),
               ),
-              const SizedBox(height: 16),
-              Text(debt.text('note')),
-              const Divider(),
-              Text(context.tr('Repayments')),
+              if (isCompleted) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.bgElevated,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'ĐÃ HOÀN TẤT THỦ CÔNG',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+              if (debt.text('note').isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(debt.text('note')),
+              ],
+              const Divider(height: 24),
+              Text(
+                'LỊCH SỬ THU/TRẢ NỢ (${payments.length})',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: colors.textSecondary,
+                ),
+              ),
               for (final p in payments)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(
                     Money.format(p.money('amount'), debt.text('currency')),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(
                     '${context.dateLabel(p.date('paid_at'))} ${p.text('note')}',
                   ),
                   trailing: IconButton(
-                    tooltip: context.tr(
-                      'Delete repayment and linked cash movement',
-                    ),
+                    tooltip: 'Xóa lần thu/trả nợ này',
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () async {
                       if (await confirmDelete(context)) {
@@ -363,9 +589,9 @@ class DebtDetail extends ConsumerWidget {
                   ),
                 ),
               if (payments.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(context.tr('No repayments yet.')),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text('Chưa có lần thu/trả nợ nào.'),
                 ),
             ],
           ),
@@ -374,13 +600,54 @@ class DebtDetail extends ConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(context.tr('Close')),
+          child: const Text('Đóng'),
         ),
-        if (left > 0 && debt.text('status') != 'cancelled')
+        TextButton.icon(
+          onPressed: () => showDebtForm(context, debt: debt, edit: true),
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Chỉnh sửa'),
+        ),
+        if (!isCompleted && debt.text('status') != 'cancelled') ...[
+          OutlinedButton(
+            onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Hoàn tất khoản nợ?'),
+                  content: const Text(
+                    'Khoản nợ sẽ được chuyển vào nhóm Đã hoàn tất, giữ nguyên lịch sử và không tạo thêm giao dịch cân bằng.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Hủy'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Hoàn tất'),
+                    ),
+                  ],
+                ),
+              );
+              if (ok == true) {
+                try {
+                  await saveAndSync(
+                    ref,
+                    (r) => DebtService(r).markDebtCompleted(debt),
+                  );
+                  if (context.mounted) Navigator.pop(context);
+                } catch (e) {
+                  if (context.mounted) message(context, userError(context, e));
+                }
+              }
+            },
+            child: const Text('Hoàn tất'),
+          ),
           FilledButton(
             onPressed: () => showDebtForm(context, debt: debt),
-            child: Text(context.tr('Add repayment')),
+            child: Text(debt.text('direction') == 'lent' ? 'Thu nợ' : 'Trả nợ'),
           ),
+        ],
       ],
     );
   }

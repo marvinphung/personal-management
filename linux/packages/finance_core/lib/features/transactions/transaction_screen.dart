@@ -1,6 +1,7 @@
 import '../../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/utils/tag_display.dart';
 import 'package:intl/intl.dart';
 import '../../app/providers.dart';
 import '../../app/widgets.dart';
@@ -66,7 +67,10 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
         rows.where((r) => r.id == id).firstOrNull?.text('name') ?? '';
     String tagNames(Record t) => links
         .where((l) => l.text('transaction_id') == t.id)
-        .map((l) => '#${label(tags, l.text('tag_id'))}')
+        .map(
+          (l) =>
+              '#${TagDisplay.forRecord(tags.where((t) => t.id == l.text('tag_id')).firstOrNull)}',
+        )
         .join(' ');
     Widget filter(
       String title,
@@ -140,7 +144,7 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
                 filter(
                   context.tr('Tag'),
                   tag,
-                  tags.map((r) => (r.id, r.text('name'))).toList(),
+                  tags.map((r) => (r.id, TagDisplay.forRecord(r))).toList(),
                   (v) => tag = v,
                 ),
               ],
@@ -409,7 +413,10 @@ class TransactionDetail extends ConsumerWidget {
                 ),
                 context.tr('Tags'): links
                     .where((l) => l.text('transaction_id') == record.id)
-                    .map((l) => '#${name(tags, l.text('tag_id'))}')
+                    .map(
+                      (l) =>
+                          '#${TagDisplay.forRecord(tags.where((t) => t.id == l.text('tag_id')).firstOrNull)}',
+                    )
                     .join(' '),
                 context.tr('Note'): record.text('note'),
                 context.tr('Created'): DateFormat.yMMMd(

@@ -54,7 +54,10 @@ void main() {
           Entity.transactionTags,
         ]),
       );
-      expect(Ledger.monthly(transactions, DateTime(2026, 9), 'VND').expense, 0);
+      expect(
+        Ledger.monthly(transactions, DateTime(2026, 9), 'VND').expense,
+        1000000,
+      );
       expect((await db.balances())[account.id], -1000000);
       await service.repay(debts.single, 300000, account: account);
       expect(

@@ -45,7 +45,7 @@ void main() {
     expect(totals.income, 0);
     expect(totals.expense, 0);
   });
-  test('monthly totals exclude debt principal and classify local month', () {
+  test('monthly totals include debt cashflows and classify local month', () {
     final rows = [
       tx('income', 1000),
       tx('expense', 400),
@@ -55,10 +55,10 @@ void main() {
       tx('expense', 100, date: DateTime(2026, 8, 31, 23, 59)),
     ];
     final totals = Ledger.monthly(rows, DateTime(2026, 9), 'VND');
-    expect(totals.income, 1000);
-    expect(totals.expense, 400);
-    expect(totals.net, 600);
-    expect(totals.savingRate, '60.0%');
+    expect(totals.income, 1300);
+    expect(totals.expense, 1300);
+    expect(totals.net, 0);
+    expect(totals.savingRate, '0.0%');
   });
   test(
     'deleted transactions do not alter balance',

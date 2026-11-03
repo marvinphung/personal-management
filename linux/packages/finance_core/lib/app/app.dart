@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import '../features/bank_import/bank_draft_repository.dart';
 import '../features/bank_import/bank_providers.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +20,24 @@ class FinanceApp extends ConsumerStatefulWidget {
 class _FinanceAppState extends ConsumerState<FinanceApp>
     with WidgetsBindingObserver {
   StreamSubscription<String>? _bankEvents;
+  static const _navigation = MethodChannel('personal_finance/navigation');
+  String? _calendarRoute;
+  Future<void> _readCalendarIntent() async {
+    if (!BankDraftRepository.supported) return;
+    try {
+      final route = await _navigation.invokeMethod<String>('consumeRoute');
+      if (mounted &&
+          route != null &&
+          (route == '/calendar' || route.startsWith('/calendar?date='))) {
+        setState(() => _calendarRoute = route);
+      }
+    } on PlatformException {
+      /* Native target stays available on retry. */
+    } on MissingPluginException {
+      /* Non-Android tests have no native navigation. */
+    }
+  }
+
   bool _openInbox = false;
   bool _readingBalances = false;
   Future<void> _readBalances() async {
@@ -56,6 +75,10 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (BankDraftRepository.supported) {
+      _navigation.setMethodCallHandler((call) async {
+        if (call.method == 'routeAvailable') await _readCalendarIntent();
+      });
+      _readCalendarIntent();
       _bankEvents = ref.read(bankDraftRepositoryProvider).events.stream.listen((
         event,
       ) {
@@ -69,6 +92,7 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
 
   @override
   void dispose() {
+    _navigation.setMethodCallHandler(null);
     _bankEvents?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -77,6 +101,7 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _readCalendarIntent();
       ref.read(workspaceProvider).value?.sync.sync();
       if (BankDraftRepository.supported) {
         ref.invalidate(bankDraftPageProvider);
@@ -94,6 +119,7 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
     // Keep the native owner lifecycle active even while the login route is shown.
     // A restored signed-out session must stop capture and erase the old inbox.
     if (BankDraftRepository.supported) ref.watch(workspaceProvider);
+    if (BankDraftRepository.supported) ref.watch(undoControllerProvider);
     final signedIn = ref.watch(sessionProvider) != null;
     final language = ref.watch(languageProvider);
     if (_openInbox && signedIn && language != null) {
@@ -103,8 +129,16 @@ class _FinanceAppState extends ConsumerState<FinanceApp>
         _openInbox = false;
       });
     }
+    if (_calendarRoute != null && signedIn && language != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _calendarRoute == null) return;
+        final route = _calendarRoute!;
+        _calendarRoute = null;
+        ref.read(routerProvider).go(route);
+      });
+    }
     return MaterialApp.router(
-      onGenerateTitle: (context) => context.tr('Personal Finance'),
+      onGenerateTitle: (context) => context.tr('Quản lý PMV'),
       locale: ref.watch(localeProvider),
       supportedLocales: const [Locale('en'), Locale('vi')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

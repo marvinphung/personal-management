@@ -140,7 +140,7 @@ class RecordPicker extends StatelessWidget {
   final String label;
   final String? value;
   final List<Record> records;
-  final ValueChanged<String?> onChanged;
+  final ValueChanged<String?>? onChanged;
   final bool optional;
   const RecordPicker({
     super.key,
@@ -164,6 +164,6 @@ class RecordPicker extends StatelessWidget {
           child: Text(r.text('name'), overflow: TextOverflow.ellipsis),
         ),
     ],
-    onChanged: (v) => onChanged(v == '' ? null : v),
+    onChanged: onChanged == null ? null : (v) => onChanged!(v == '' ? null : v),
   );
 }

@@ -52,6 +52,16 @@ class FakeBankInbox extends BankDraftRepository {
   }
 
   @override
+  Future<void> ignoreId(String owner, String id) async {
+    if (failFinish) throw StateError('disk unavailable');
+    rows.removeWhere((r) => r.id == id);
+    finished++;
+    events.add('changed');
+  }
+
+  @override
+  Future<void> refreshWidget() async {}
+  @override
   Future<bool> consumeOpenPending() async {
     final value = open;
     open = false;
@@ -73,7 +83,10 @@ void main() {
   late UserWorkspace workspace;
   late FakeBankInbox inbox;
   late BankDraft draft;
-  setUp(() {
+  late SharedPreferences preferences;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    preferences = await SharedPreferences.getInstance();
     final db = LocalDatabase.memory();
     workspace = UserWorkspace(
       db,
@@ -103,6 +116,7 @@ void main() {
   Widget wrap(Widget child, {Locale locale = const Locale('en')}) =>
       ProviderScope(
         overrides: [
+          preferencesProvider.overrideWithValue(preferences),
           workspaceProvider.overrideWith(() => TestWorkspace(workspace)),
           bankDraftRepositoryProvider.overrideWithValue(inbox),
         ],
@@ -113,6 +127,59 @@ void main() {
           home: Scaffold(body: child),
         ),
       );
+
+  testWidgets(
+    'classification without default account allows selecting a matching account and persists immutable source',
+    (tester) async {
+      final repo = workspace.repository;
+      final account = repo.create(Entity.accounts, {
+        'name': 'USD card',
+        'currency': 'USD',
+      });
+      final category = repo.create(Entity.categories, {'name': 'Ăn uống'});
+      await repo.saveBatch([account, category]);
+      await tester.pumpWidget(
+        wrap(
+          Builder(
+            builder: (context) => TextButton(
+              child: const Text('Open'),
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => PmvClassifyForm(draft: draft),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      final picker = find.byWidgetPredicate(
+        (w) =>
+            w is DropdownButtonFormField<String> &&
+            w.decoration.labelText == 'Tài khoản ghi sổ',
+      );
+      await tester.ensureVisible(picker);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('USD card').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Ăn uống'));
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Ăn uống'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Xác nhận'));
+      await tester.tap(find.text('Xác nhận'));
+      await tester.pumpAndSettle();
+      final saved = (await workspace.db.list(Entity.transactions)).single;
+      expect(saved.text('account_id'), account.id);
+      expect(saved.money('amount'), 1999);
+      expect(saved.text('description'), draft.description);
+      expect(saved.data['bank_source'], isNotNull);
+      expect(inbox.rows, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
 
   testWidgets(
     'permission is distinct from connection and reconnect refreshes status',
@@ -173,12 +240,14 @@ void main() {
             .text,
         '19.99',
       );
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Description'),
-        'Coffee',
+      expect(
+        tester
+            .widget<TextField>(find.widgetWithText(TextField, 'Description'))
+            .readOnly,
+        isTrue,
       );
-      await tester.ensureVisible(find.widgetWithText(FilterChip, '#caphe'));
-      await tester.tap(find.widgetWithText(FilterChip, '#caphe'));
+      await tester.ensureVisible(find.widgetWithText(FilterChip, '#Cà phê'));
+      await tester.tap(find.widgetWithText(FilterChip, '#Cà phê'));
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(inbox.rows, hasLength(1));
@@ -190,7 +259,7 @@ void main() {
       final saved = (await workspace.db.list(Entity.transactions)).single;
       expect(saved.money('amount'), 1999);
       expect(saved.text('currency'), 'USD');
-      expect(saved.text('description'), 'Coffee');
+      expect(saved.text('description'), 'Google Service');
       expect(await workspace.db.list(Entity.tags), hasLength(1));
     },
     variant: TargetPlatformVariant.only(TargetPlatform.android),
@@ -209,7 +278,7 @@ void main() {
       expect(find.textContaining('19.99 USD'), findsOneWidget);
       await tester.tap(find.text('Bỏ qua'));
       await tester.pumpAndSettle();
-      expect(find.text('Đã xử lý hết'), findsOneWidget);
+      expect(find.text('Không có giao dịch nào đang chờ.'), findsOneWidget);
       expect(tester.takeException(), isNull);
       expect(await workspace.db.list(Entity.transactions), isEmpty);
     },

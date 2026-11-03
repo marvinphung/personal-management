@@ -54,3 +54,6 @@ android/signing/
 *.deb
 
 **/.kotlin/
+
+# Local verification captures may contain personal financial data
+/artifacts/

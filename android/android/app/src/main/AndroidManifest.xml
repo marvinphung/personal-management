@@ -1,18 +1,24 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.READ_CALENDAR"/>
     <application
-        android:label="Finance Inbox" android:allowBackup="false"
+        android:label="Quản lý PMV" android:allowBackup="false"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round">
         <service android:name=".banknotification.BankNotificationListenerService"
             android:label="Personal Finance — Bank Import"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter>
         </service>
-        <receiver android:name=".banknotification.BankInboxWidget" android:exported="false" android:label="Finance Inbox">
+        <receiver android:name=".banknotification.BankInboxWidget" android:exported="false" android:label="Biến động">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/bank_inbox_widget"/>
+        </receiver>
+        <receiver android:name=".calendar.CalendarWidgetProvider" android:exported="false" android:label="Lịch PMV">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/><action android:name="android.intent.action.DATE_CHANGED"/><action android:name="android.intent.action.TIME_SET"/><action android:name="android.intent.action.TIMEZONE_CHANGED"/></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/calendar_widget_info"/>
         </receiver>
         <activity
             android:name=".MainActivity"

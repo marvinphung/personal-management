@@ -39,7 +39,7 @@ void main() {
       await BankConfirmation.save(repo, draft, row, []);
       final saved = (await db.list(Entity.transactions)).single;
       expect(saved.money('amount'), 1999);
-      expect(saved.text('description'), isEmpty);
+      expect(saved.text('description'), 'Google Service');
       expect(saved.text('currency'), 'USD');
       expect(saved.data.containsKey('rawContent'), false);
       expect((await db.pending()).last.rows.single.id, row.id);
@@ -55,10 +55,10 @@ void main() {
       ]);
       expect(await db.list(Entity.transactions), hasLength(1));
       expect(await db.pending(), hasLength(2));
-      await repo.save(row.patch({'description': 'Reviewed edit'}));
+      await repo.save(row.patch({'note': 'Reviewed edit'}));
       await BankConfirmation.save(repo, draft, row, []);
       expect(
-        (await db.list(Entity.transactions)).single.text('description'),
+        (await db.list(Entity.transactions)).single.text('note'),
         'Reviewed edit',
       );
     },

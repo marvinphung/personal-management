@@ -8,9 +8,22 @@ class Money {
   }) {
     final exponent = exponents[currency];
     if (exponent == null) throw const FormatException('Unsupported currency');
-    final match = RegExp(
-      r'^(\d+)(?:\.(\d+))?([kKmM]?)$',
-    ).firstMatch(input.trim());
+    var text = input.trim();
+    if (text.contains(',')) {
+      if (!RegExp(
+        r'^\d{1,3}(?:,\d{3})+(?:\.\d+)?(?:[kKmM]|[tT][rR]\d{0,6})?$',
+      ).hasMatch(text)) {
+        throw const FormatException('Invalid thousands separators');
+      }
+      text = text.replaceAll(',', '');
+    }
+    if (currency == 'VND') {
+      final millions = RegExp(r'^(\d+)[tT][rR](\d{0,6})$').firstMatch(text);
+      if (millions != null) {
+        text = '${millions[1]}.${millions[2]!.isEmpty ? '0' : millions[2]}m';
+      }
+    }
+    final match = RegExp(r'^(\d+)(?:\.(\d+))?([kKmM]?)$').firstMatch(text);
     if (match == null) {
       throw const FormatException('Enter an amount such as 45000, 45k or 1.5m');
     }
@@ -55,6 +68,16 @@ class Money {
     if (exponent == 0) return minor.toString();
     final digits = minor.abs().toString().padLeft(exponent + 1, '0');
     return '${minor < 0 ? '-' : ''}${digits.substring(0, digits.length - exponent)}.${digits.substring(digits.length - exponent)}';
+  }
+
+  static String groupInteger(String digits) => digits.replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+    (m) => '${m[1]},',
+  );
+
+  static String groupedInput(int minor, String currency) {
+    final parts = input(minor, currency).split('.');
+    return '${groupInteger(parts.first)}${parts.length > 1 ? '.${parts[1]}' : ''}';
   }
 
   static String format(int minor, [String currency = 'VND']) {

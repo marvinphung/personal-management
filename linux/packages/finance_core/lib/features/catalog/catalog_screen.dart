@@ -1,3 +1,5 @@
+import '../../core/utils/money_input_formatter.dart';
+import '../../core/utils/tag_display.dart';
 import '../../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,10 +57,25 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               final filtered =
                   records
                       .where(
-                        (r) => r.text('name').toLowerCase().contains(query),
+                        (r) =>
+                            (widget.entity == Entity.tags
+                                    ? TagDisplay.forRecord(r)
+                                    : r.text('name'))
+                                .toLowerCase()
+                                .contains(query),
                       )
                       .toList()
-                    ..sort((a, b) => a.text('name').compareTo(b.text('name')));
+                    ..sort(
+                      (a, b) =>
+                          (widget.entity == Entity.tags
+                                  ? TagDisplay.forRecord(a)
+                                  : a.text('name'))
+                              .compareTo(
+                                widget.entity == Entity.tags
+                                    ? TagDisplay.forRecord(b)
+                                    : b.text('name'),
+                              ),
+                    );
               if (filtered.isEmpty) {
                 return EmptyState(
                   title: context.tr('No {entity} yet', {
@@ -83,15 +100,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           : Icons.label_outline,
                     ),
                     title: Text(
-                      '${widget.entity == Entity.tags ? '#' : ''}${r.text('name')}${r.flag('is_archived') ? context.tr(' · Archived') : ''}',
+                      '${widget.entity == Entity.tags ? '#' : ''}${widget.entity == Entity.tags ? TagDisplay.forRecord(r) : r.text('name')}${r.flag('is_archived') ? context.tr(' · Archived') : ''}',
                     ),
                     subtitle: widget.entity == Entity.accounts
-                        ? Text(
-                            Money.format(
-                              balances[r.id] ?? 0,
-                              r.text('currency'),
-                            ),
-                          )
+                        ? Text(r.text('currency'))
                         : widget.entity == Entity.tags
                         ? Text(
                             categories
@@ -132,11 +144,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 }
 
-Future<void> showCatalogForm(
+Future<Record?> showCatalogForm(
   BuildContext context,
   Entity entity, {
   Record? record,
-}) => showDialog<void>(
+}) => showDialog<Record>(
   context: context,
   builder: (_) => CatalogForm(entity: entity, record: record),
 );
@@ -161,13 +173,21 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
   void initState() {
     super.initState();
     final r = widget.record;
-    name.text = r?.text('name') ?? '';
+    name.text =
+        widget.entity == Entity.tags &&
+            r != null &&
+            r.text('display_name').isNotEmpty
+        ? TagDisplay.forRecord(r)
+        : r?.text('name') ?? '';
     category = r?.data['category_id'] as String?;
     type =
         r?.text('type') ??
         (widget.entity == Entity.accounts ? 'cash' : 'expense');
     currency = r?.text('currency') ?? 'VND';
-    opening.text = Money.input(r?.money('opening_balance') ?? 0, currency);
+    opening.text = Money.groupedInput(
+      r?.money('opening_balance') ?? 0,
+      currency,
+    );
     note.text = r?.text('note') ?? '';
     phone.text = r?.text('phone_optional') ?? '';
     archived = r?.flag('is_archived') ?? false;
@@ -188,6 +208,7 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
       error = null;
     });
     try {
+      Record? savedRecord;
       await saveAndSync(ref, (repo) async {
         final data = <String, dynamic>{'name': name.text.trim()};
         if (widget.entity == Entity.accounts) {
@@ -216,7 +237,12 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
           });
         }
         if (widget.entity == Entity.tags) {
-          data['name'] = normalizeTagName(name.text);
+          if (widget.record?.text('display_name').isNotEmpty ?? false) {
+            data['name'] = widget.record!.text('name');
+            data['display_name'] = name.text.trim();
+          } else {
+            data['name'] = normalizeTagName(name.text);
+          }
           data['category_id'] = category;
         }
         if (widget.entity == Entity.people) {
@@ -227,11 +253,11 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
                 : phone.text.trim(),
           });
         }
-        await repo.save(
-          widget.record?.patch(data) ?? repo.create(widget.entity, data),
-        );
+        savedRecord =
+            widget.record?.patch(data) ?? repo.create(widget.entity, data);
+        await repo.save(savedRecord!);
       });
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, savedRecord);
     } catch (e) {
       if (mounted) setState(() => error = userError(context, e));
     } finally {
@@ -293,6 +319,7 @@ class _CatalogFormState extends ConsumerState<CatalogForm> {
         ),
         TextField(
           controller: opening,
+          inputFormatters: [MoneyInputFormatter(allowNegative: true)],
           keyboardType: const TextInputType.numberWithOptions(
             decimal: true,
             signed: true,
@@ -374,23 +401,6 @@ Future<void> showAccountDetail(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                Money.format(balance, account.text('currency')),
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              if (account.data['bank_balance_at'] != null)
-                Text(
-                  context.tr('Bank balance at {date}: {amount}', {
-                    'date': context.dateLabel(
-                      account.date('bank_balance_at'),
-                      time: true,
-                    ),
-                    'amount': Money.format(
-                      account.money('bank_balance'),
-                      account.text('currency'),
-                    ),
-                  }),
-                ),
               const SizedBox(height: 20),
               Text(
                 context.tr('Selected month income: {amount}', {

@@ -90,7 +90,9 @@ class Record {
     Entity.tags => {},
     Entity.people => {'phone_optional': null, 'note': null},
     Entity.transactions => {
+      'exclude_from_totals': false,
       'purpose': 'normal',
+      'bank_source': null,
       'currency': 'VND',
       'account_id': null,
       'from_account_id': null,
@@ -101,11 +103,13 @@ class Record {
     },
     Entity.transactionTags => {},
     Entity.debts => {
+      'exclude_from_totals': false,
       'currency': 'VND',
       'due_at': null,
       'note': null,
       'status': 'active',
       'linked_transaction_id': null,
+      'manual_completed_at': null,
     },
     Entity.debtPayments => {'note': null, 'linked_transaction_id': null},
     Entity.notes => {

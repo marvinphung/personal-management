@@ -1,30 +1,46 @@
-import 'installments.dart';
-import '../debts/debt_service.dart';
-import '../catalog/catalog_screen.dart';
-import '../bank_import/bank_draft.dart';
-import '../bank_import/bank_confirmation.dart';
-import '../bank_import/bank_draft_repository.dart';
-import '../bank_import/bank_providers.dart';
-import '../../core/localization/app_language.dart';
+import '../catalog/person_picker.dart';
+import '../../core/utils/money_input_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../app/widgets.dart';
 import '../../core/database/record.dart';
+import '../../core/localization/app_language.dart';
 import '../../core/utils/money.dart';
-import 'tag_suggestions.dart';
+import '../../core/utils/tag_display.dart';
 import '../../core/utils/tag_name.dart';
+import '../bank_import/bank_confirmation.dart';
+import '../bank_import/bank_draft.dart';
+import '../bank_import/bank_draft_repository.dart';
+import '../bank_import/bank_providers.dart';
+import '../debts/debt_service.dart';
+import 'tag_suggestions.dart';
 
-Future<void> showTransactionForm(BuildContext context, {Record? record}) =>
-    showDialog<void>(
-      context: context,
-      builder: (_) => TransactionForm(record: record),
-    );
+Future<void> showTransactionForm(
+  BuildContext context, {
+  Record? record,
+  String? initialCategory,
+  String? initialType,
+}) => showDialog<void>(
+  context: context,
+  builder: (_) => TransactionForm(
+    record: record,
+    initialCategory: initialCategory,
+    initialType: initialType,
+  ),
+);
 
 class TransactionForm extends ConsumerStatefulWidget {
   final Record? record;
   final BankDraft? bankDraft;
-  const TransactionForm({super.key, this.record, this.bankDraft});
+  final String? initialCategory, initialType;
+  const TransactionForm({
+    super.key,
+    this.record,
+    this.bankDraft,
+    this.initialCategory,
+    this.initialType,
+  });
   @override
   ConsumerState<TransactionForm> createState() => _TransactionFormState();
 }
@@ -35,20 +51,24 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       note = TextEditingController(),
       tagInput = TextEditingController();
   String type = 'expense';
-  bool installments = false;
-  int installmentMonths = 6, installmentDay = 24;
-  Record? installmentTemplate;
   String? reviewCurrency;
   String? account, from, to, category, error, borrower;
+  String? actionTag;
+  String? selectedDebtId;
   DateTime occurred = DateTime.now();
   final selectedTags = <String>{};
   bool busy = false, initialized = false;
+  bool get bankReadOnly =>
+      widget.bankDraft != null || widget.record?.data['bank_source'] != null;
+
   @override
   void initState() {
     super.initState();
+    category = widget.initialCategory;
+    type = widget.initialType ?? type;
     final r = widget.record;
     if (r != null) {
-      amount.text = Money.input(r.money('amount'), r.text('currency'));
+      amount.text = Money.groupedInput(r.money('amount'), r.text('currency'));
       description.text = r.text('description');
       note.text = r.text('note');
       type = r.text('type');
@@ -73,8 +93,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
   Future<void> save(
     List<Record> accounts,
     List<Record> tags, {
-    bool lending = false,
+    bool isCongNo = false,
     List<Record> people = const [],
+    List<Record> debts = const [],
   }) async {
     setState(() {
       busy = true;
@@ -91,8 +112,16 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         throw const FormatException('Account currency does not match');
       }
       final value = Money.parse(amount.text, currency: picked.text('currency'));
+      if (type != 'transfer' && category == null) {
+        throw const FormatException('Choose a category');
+      }
+      if (isCongNo && actionTag == null) {
+        throw const FormatException('Chọn hành động công nợ');
+      }
+
       await saveAndSync(ref, (repository) async {
         final values = {
+          'exclude_from_totals': false,
           'type': type,
           'amount': value,
           'currency': picked.text('currency'),
@@ -115,6 +144,10 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               .map(normalizeTagName)
               .where((s) => s.isNotEmpty),
         };
+        if (isCongNo && actionTag != null) {
+          names.add(normalizeTagName(actionTag!));
+        }
+
         for (final name in names) {
           final existingTag = tags
               .where((t) => t.text('name').toLowerCase() == name)
@@ -125,21 +158,33 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             throw const FormatException('This tag belongs to another category');
           }
           chosen.add(
-            tags
-                    .where((t) => t.text('name').toLowerCase() == name)
-                    .firstOrNull ??
+            existingTag ??
                 repository.create(Entity.tags, {
                   'name': name,
                   'category_id': category,
                 }),
           );
         }
-        final person = lending
-            ? people.where((p) => p.id == borrower).firstOrNull
-            : null;
-        if (lending && person == null) {
-          throw const FormatException('Create or select a person first');
+
+        final person = people.where((p) => p.id == borrower).firstOrNull;
+        final targetDebt = debts
+            .where((d) => d.id == selectedDebtId)
+            .firstOrNull;
+
+        if (isCongNo) {
+          if (actionTag == 'Cho vay' || actionTag == 'Vay nợ') {
+            if (person == null) {
+              throw const FormatException('Create or select a person first');
+            }
+          } else if (actionTag == 'Thu nợ' || actionTag == 'Trả nợ') {
+            if (targetDebt == null) {
+              throw const FormatException(
+                'Vui lòng chọn khoản công nợ cần thanh toán',
+              );
+            }
+          }
         }
+
         if (widget.bankDraft != null) {
           await BankConfirmation.save(
             repository,
@@ -147,25 +192,38 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             transaction,
             chosen,
             borrower: person,
+            linkedDebt: targetDebt,
+            disbursementDirection: actionTag == 'Cho vay'
+                ? DebtDirection.lent
+                : actionTag == 'Vay nợ'
+                ? DebtDirection.borrowed
+                : null,
           );
-        } else if (lending) {
+        } else if (isCongNo && actionTag == 'Cho vay') {
+          await DebtService(repository).saveDisbursementTransaction(
+            transaction,
+            person!,
+            DebtDirection.lent,
+            chosen,
+          );
+        } else if (isCongNo && actionTag == 'Vay nợ') {
+          await DebtService(repository).saveDisbursementTransaction(
+            transaction,
+            person!,
+            DebtDirection.borrowed,
+            chosen,
+          );
+        } else if (isCongNo &&
+            (actionTag == 'Thu nợ' || actionTag == 'Trả nợ')) {
           await DebtService(
             repository,
-          ).saveLendingTransaction(transaction, person!, chosen);
-        } else if (installments && type == 'expense') {
-          installmentTemplate ??= transaction;
-          await Installments.save(
-            repository,
-            transaction.patch({'id': installmentTemplate!.id}),
-            chosen,
-            months: installmentMonths,
-            day: installmentDay,
-          );
+          ).saveRepaymentTransaction(transaction, targetDebt!, chosen);
         } else {
           await repository.saveTransaction(transaction, chosen);
         }
         await repository.rememberSelections(picked.id, category);
       });
+
       if (widget.bankDraft != null) {
         try {
           await ref
@@ -179,13 +237,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         ref.invalidate(bankDraftsProvider);
         ref.invalidate(bankCountProvider);
       }
-      if (mounted) {
-        Navigator.pop(context);
-        message(
-          context,
-          context.tr('Saved locally. Sync will run when connected.'),
-        );
-      }
+      if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() => error = userError(context, e));
     } finally {
@@ -197,6 +249,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
   Widget build(BuildContext context) {
     final accountState = ref.watch(recordsProvider(Entity.accounts));
     final categoryState = ref.watch(recordsProvider(Entity.categories));
+    final allCategories = categoryState.value ?? [];
     final accounts = (accountState.value ?? [])
         .where(
           (a) =>
@@ -206,7 +259,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               a.id == to,
         )
         .toList();
-    final categories = (categoryState.value ?? [])
+    final categories = allCategories
         .where(
           (c) =>
               (!c.flag('is_archived') || c.id == category) &&
@@ -215,6 +268,8 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         .toList();
     final peopleState = ref.watch(recordsProvider(Entity.people));
     final people = peopleState.value ?? <Record>[];
+    final debtsState = ref.watch(recordsProvider(Entity.debts));
+    final allDebts = debtsState.value ?? <Record>[];
     final tagState = ref.watch(recordsProvider(Entity.tags));
     final links = ref.watch(recordsProvider(Entity.transactionTags));
     final tags = tagSuggestions(tagState.value ?? [], links.value ?? []);
@@ -223,6 +278,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         categoryState.hasValue &&
         tagState.hasValue &&
         links.hasValue;
+
     if (!initialized && accounts.isNotEmpty && ready) {
       initialized = true;
       account ??=
@@ -249,17 +305,40 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           if (mounted) {
             setState(() {
               if (accounts.any((r) => r.id == a)) account = a;
-              if (categories.any((r) => r.id == c)) category = c;
+              if (widget.initialCategory == null &&
+                  categories.any((r) => r.id == c)) {
+                category = c;
+              }
             });
           }
         });
       }
     }
-    final isLending =
-        type == 'expense' &&
-        categories.any(
-          (c) => c.id == category && c.text('behavior') == 'lending',
-        );
+
+    final selectedCat = allCategories
+        .where((c) => c.id == category)
+        .firstOrNull;
+    final catBehavior = selectedCat?.text('behavior') ?? 'normal';
+    final isCongNo =
+        catBehavior == 'cong_no_expense' ||
+        catBehavior == 'cong_no_income' ||
+        catBehavior == 'lending' ||
+        selectedCat?.text('name') == 'Công nợ';
+
+    final activeDebts = allDebts
+        .where(
+          (d) =>
+              !d.deleted &&
+              d.text('status') == 'active' &&
+              d.text('direction') ==
+                  (actionTag == 'Thu nợ'
+                      ? 'lent'
+                      : actionTag == 'Trả nợ'
+                      ? 'borrowed'
+                      : ''),
+        )
+        .toList();
+
     return FormDialog(
       title: widget.bankDraft != null
           ? context.tr('Confirm bank transaction')
@@ -267,17 +346,22 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           ? context.tr('New transaction')
           : context.tr('Edit transaction'),
       busy: busy,
-      saveEnabled: ready && (!isLending || peopleState.hasValue),
+      saveEnabled: ready,
       error:
           error ??
           (accountState.hasError ||
                   categoryState.hasError ||
                   tagState.hasError ||
-                  links.hasError ||
-                  (isLending && peopleState.hasError)
+                  links.hasError
               ? context.tr("Could not load choices. Close this form and retry.")
               : null),
-      save: () => save(accounts, tags, lending: isLending, people: people),
+      save: () => save(
+        accounts,
+        tags,
+        isCongNo: isCongNo,
+        people: people,
+        debts: allDebts,
+      ),
       children: [
         if (widget.bankDraft != null) ...[
           Text(
@@ -285,117 +369,74 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               'Review every field before confirming. No currency conversion is performed.',
             ),
           ),
-          DropdownButtonFormField<String>(
-            initialValue: reviewCurrency,
-            decoration: InputDecoration(labelText: context.tr('Currency')),
-            items: const [
-              DropdownMenuItem(value: 'VND', child: Text('VND')),
-              DropdownMenuItem(value: 'USD', child: Text('USD')),
-            ],
-            onChanged: busy
-                ? null
-                : (value) => setState(() => reviewCurrency = value),
-          ),
-          Text(
-            context.tr('Account currency: {currency}', {
-              'currency':
-                  accounts
-                      .where(
-                        (a) => a.id == (type == 'transfer' ? from : account),
-                      )
-                      .firstOrNull
-                      ?.text('currency') ??
-                  '—',
-            }),
-          ),
-          if (type == 'unknown')
-            Text(context.tr('Choose income, expense or transfer.')),
+          const SizedBox(height: 8),
         ],
         TextField(
           controller: amount,
-          autofocus: true,
+          inputFormatters: [MoneyInputFormatter(allowNegative: false)],
+          readOnly: bankReadOnly,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          style: Theme.of(context).textTheme.headlineMedium,
           decoration: InputDecoration(
-            labelText: context.tr(
-              installments && type == 'expense' ? 'Monthly payment' : 'Amount',
-            ),
-            hintText: context.tr('45000 or 45k'),
+            labelText: context.tr('Amount'),
+            prefixText: widget.bankDraft != null
+                ? '${widget.bankDraft!.direction == 'income' ? '+' : '−'} '
+                : null,
+            suffixText: accounts
+                .where((a) => a.id == (type == 'transfer' ? from : account))
+                .firstOrNull
+                ?.text('currency'),
           ),
+          autofocus: widget.bankDraft == null && widget.record == null,
           textInputAction: TextInputAction.next,
         ),
-        SegmentedButton<String>(
-          segments: [
-            ButtonSegment(value: 'expense', label: Text(context.tr('Expense'))),
-            ButtonSegment(value: 'income', label: Text(context.tr('Income'))),
-            ButtonSegment(
-              value: 'transfer',
-              label: Text(context.tr('Transfer')),
-            ),
-          ],
-          emptySelectionAllowed: type == 'unknown',
-          selected: type == 'unknown' ? <String>{} : {type},
-          onSelectionChanged: (v) => setState(() {
-            type = v.isEmpty ? 'unknown' : v.first;
-            category = null;
-            selectedTags.clear();
-            tagInput.clear();
-          }),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(context.tr('Date')),
+          subtitle: Text(context.dateLabel(occurred)),
+          trailing: const Icon(Icons.calendar_today),
+          onTap: bankReadOnly
+              ? null
+              : () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: occurred,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) setState(() => occurred = picked);
+                },
         ),
-        if (widget.record == null && type == 'expense' && !isLending) ...[
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(context.tr('Installments')),
-            value: installments,
-            onChanged: busy
-                ? null
-                : (v) => setState(() => installments = v ?? false),
-          ),
-          if (installments) ...[
-            DropdownButtonFormField<int>(
-              initialValue: installmentMonths,
-              decoration: InputDecoration(
-                labelText: context.tr('Number of months'),
-              ),
-              items: List.generate(
-                60,
-                (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}')),
-              ),
-              onChanged: busy
-                  ? null
-                  : (v) => setState(() => installmentMonths = v!),
+        DropdownButtonFormField<String>(
+          initialValue: type,
+          decoration: InputDecoration(labelText: context.tr('Type')),
+          items: [
+            DropdownMenuItem(
+              value: 'expense',
+              child: Text(context.tr('Expense')),
             ),
-            DropdownButtonFormField<int>(
-              initialValue: installmentDay,
-              decoration: InputDecoration(labelText: context.tr('Payment day')),
-              items: List.generate(
-                31,
-                (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}')),
-              ),
-              onChanged: busy
-                  ? null
-                  : (v) => setState(() => installmentDay = v!),
+            DropdownMenuItem(
+              value: 'income',
+              child: Text(context.tr('Income')),
             ),
-            Text(
-              context.tr('First payment: {date}', {
-                'date': context.dateLabel(
-                  Installments.dates(
-                    occurred,
-                    installmentMonths,
-                    installmentDay,
-                  ).first,
-                ),
-              }),
-            ),
-            Text(
-              context.tr(
-                'Enter the monthly payment. Short months use their last day. Future payments do not reduce your current balance.',
-              ),
+            DropdownMenuItem(
+              value: 'transfer',
+              child: Text(context.tr('Transfer')),
             ),
           ],
-        ],
+          onChanged: bankReadOnly
+              ? null
+              : (v) => setState(() {
+                  type = v!;
+                  category = null;
+                  selectedTags.clear();
+                  tagInput.clear();
+                  actionTag = null;
+                  selectedDebtId = null;
+                }),
+        ),
         TextField(
           controller: description,
+          readOnly: bankReadOnly,
           decoration: InputDecoration(
             labelText: context.tr('Description'),
             hintText: context.tr('Coffee'),
@@ -410,30 +451,83 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             records: categories,
             onChanged: (v) => setState(() {
               category = v;
-              installments = false;
               selectedTags.clear();
               tagInput.clear();
+              actionTag = null;
+              selectedDebtId = null;
             }),
-            optional: true,
+            optional: false,
           ),
-        if (isLending) ...[
+        if (isCongNo) ...[
+          const SizedBox(height: 8),
           Text(
-            context.tr(
-              'This creates a linked debt and is excluded from spending.',
+            'Hành động công nợ',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            children:
+                (type == 'expense'
+                        ? ['Cho vay', 'Trả nợ']
+                        : ['Thu nợ', 'Vay nợ'])
+                    .map(
+                      (tag) => ChoiceChip(
+                        label: Text(tag),
+                        selected: actionTag == tag,
+                        onSelected: (_) => setState(() {
+                          actionTag = tag;
+                          selectedDebtId = null;
+                        }),
+                      ),
+                    )
+                    .toList(),
+          ),
+          if (actionTag == 'Cho vay' || actionTag == 'Vay nợ') ...[
+            const SizedBox(height: 8),
+            PersonPicker(
+              label: context.tr('Người liên quan'),
+              value: borrower,
+              records: people,
+              onChanged: (v) => setState(() => borrower = v),
             ),
-          ),
-          RecordPicker(
-            label: context.tr('Borrower'),
-            value: borrower,
-            records: people,
-            onChanged: (v) => setState(() => borrower = v),
-          ),
-          TextButton.icon(
-            onPressed: () => showCatalogForm(context, Entity.people),
-            icon: const Icon(Icons.person_add_alt),
-            label: Text(context.tr('Add person')),
-          ),
+          ],
+          if ((actionTag == 'Thu nợ' || actionTag == 'Trả nợ') &&
+              activeDebts.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            RecordPicker(
+              label: 'Chọn danh sách công nợ',
+              value: selectedDebtId,
+              records: activeDebts,
+              onChanged: (v) => setState(() => selectedDebtId = v),
+              optional: false,
+            ),
+          ],
         ],
+        if (isCongNo && type == 'expense')
+          Wrap(
+            spacing: 4,
+            children: tags
+                .where(
+                  (t) =>
+                      t.text('category_id') == category &&
+                      TagDisplay.forRecord(t) == 'Mua chung',
+                )
+                .map(
+                  (t) => FilterChip(
+                    label: Text('#${TagDisplay.forRecord(t)}'),
+                    selected: selectedTags.contains(t.text('name')),
+                    onSelected: (v) => setState(() {
+                      if (v) {
+                        selectedTags.add(t.text('name'));
+                      } else {
+                        selectedTags.remove(t.text('name'));
+                      }
+                    }),
+                  ),
+                )
+                .toList(),
+          ),
         RecordPicker(
           key: ValueKey('account-$type'),
           label: type == 'transfer'
@@ -462,81 +556,49 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               'Add an account from More → Accounts before recording a transaction.',
             ),
           ),
-        Text(context.tr('Tags')),
-        if (category == null)
-          Text(context.tr('Choose a category to see its tags')),
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          children: tags
-              .where(
-                (t) =>
-                    tagsForCategory([t], category).isNotEmpty ||
-                    selectedTags.contains(t.text('name').toLowerCase()),
-              )
-              .map(
-                (t) => FilterChip(
-                  label: Text('#${t.text('name')}'),
-                  selected: selectedTags.contains(t.text('name').toLowerCase()),
-                  onSelected: (v) => setState(() {
-                    if (v) {
-                      selectedTags.add(t.text('name').toLowerCase());
-                    } else {
-                      selectedTags.remove(t.text('name').toLowerCase());
-                    }
-                  }),
-                ),
-              )
-              .toList(),
-        ),
-        if (category != null)
+        if (!isCongNo && category != null) ...[
+          Text(context.tr('Tags')),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: tags
+                .where(
+                  (t) =>
+                      tagsForCategory([t], category).isNotEmpty ||
+                      selectedTags.contains(t.text('name').toLowerCase()),
+                )
+                .map(
+                  (t) => FilterChip(
+                    label: Text('#${TagDisplay.forRecord(t)}'),
+                    selected: selectedTags.contains(
+                      t.text('name').toLowerCase(),
+                    ),
+                    onSelected: (v) => setState(() {
+                      if (v) {
+                        selectedTags.add(t.text('name').toLowerCase());
+                      } else {
+                        selectedTags.remove(t.text('name').toLowerCase());
+                      }
+                    }),
+                  ),
+                )
+                .toList(),
+          ),
           TextField(
             controller: tagInput,
             decoration: InputDecoration(
               labelText: context.tr('Add tags (optional)'),
-              hintText: '#caphe, #antrua',
+              hintText: 'coffee, friends',
             ),
+            textInputAction: TextInputAction.next,
           ),
-        ExpansionTile(
-          title: Text(context.tr('Date & note')),
-          tilePadding: EdgeInsets.zero,
-          children: [
-            TextButton.icon(
-              icon: const Icon(Icons.calendar_today),
-              label: Text(context.dateLabel(occurred, time: true)),
-              onPressed: () async {
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: occurred,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                );
-                if (d != null && context.mounted) {
-                  final time = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.fromDateTime(occurred),
-                  );
-                  if (mounted) {
-                    setState(
-                      () => occurred = DateTime(
-                        d.year,
-                        d.month,
-                        d.day,
-                        time?.hour ?? occurred.hour,
-                        time?.minute ?? occurred.minute,
-                      ),
-                    );
-                  }
-                }
-              },
-            ),
-            TextField(
-              controller: note,
-              minLines: 2,
-              maxLines: 4,
-              decoration: InputDecoration(labelText: context.tr('Note')),
-            ),
-          ],
+        ],
+        TextField(
+          controller: note,
+          decoration: InputDecoration(
+            labelText: context.tr('Notes (optional)'),
+          ),
+          textInputAction: TextInputAction.done,
         ),
       ],
     );

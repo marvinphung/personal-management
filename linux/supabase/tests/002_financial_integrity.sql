@@ -13,8 +13,8 @@ do $$ declare amount numeric; n int; begin
 end $$;
 do $$ declare blocked boolean:=false; begin
  begin perform public.finance_apply('d470efdf-a4d9-45bc-a84a-5c84958459cd','[{"table": "debt_payments", "data": {"id": "7c46c4ac-dd15-4022-88d1-d3b75f47e6f1", "user_id": "a1000000-0000-4000-8000-000000000001", "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z", "client_modified_at": "2026-01-01T00:00:00Z", "mutation_id": "963eece1-4e27-4c8a-b7d1-62f298586e8d", "deleted_at": null, "debt_id": "b49563d6-4434-4636-909e-7a1a52557f30", "amount": 800000, "paid_at": "2026-01-01T00:00:00Z", "note": null, "linked_transaction_id": null}}]'::jsonb); exception when others then blocked=true; end;
- if not blocked then raise exception 'Accepted overpayment'; end if;
- if exists(select 1 from public.debt_payments where id='7c46c4ac-dd15-4022-88d1-d3b75f47e6f1') then raise exception 'Failed operation leaked data'; end if;
+ if blocked then raise exception 'PMV overpayment rejected'; end if;
+ if not exists(select 1 from public.debt_payments where id='7c46c4ac-dd15-4022-88d1-d3b75f47e6f1') then raise exception 'Overpayment not persisted'; end if;
 end $$;
 do $$ declare blocked boolean:=false; begin
  begin perform public.finance_apply('252eb2ad-9a5e-4430-a743-0929a82ad97e','[{"table": "transactions", "data": {"id": "5a240dff-7951-4fb6-8074-87670d82718a", "user_id": "a1000000-0000-4000-8000-000000000001", "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z", "client_modified_at": "2026-01-01T00:00:00Z", "mutation_id": "dfdc0aad-8ead-48ca-9d19-8b1388171f87", "deleted_at": null, "type": "expense", "purpose": "normal", "amount": 5, "currency": "VND", "account_id": "b2000000-0000-4000-8000-000000000001", "from_account_id": null, "to_account_id": null, "category_id": null, "description": "Foreign account", "note": null, "occurred_at": "2026-01-01T00:00:00Z"}}]'::jsonb); exception when others then blocked=true; end;
@@ -27,7 +27,7 @@ do $$ declare blocked boolean:=false; begin
 end $$;
 select public.finance_defaults();
 select public.finance_defaults();
-do $$ declare n int; begin select count(*) into n from public.categories where user_id='a1000000-0000-4000-8000-000000000001' and is_default; if n<>15 then raise exception 'Default categories not idempotent'; end if; end $$;
+do $$ declare n int; begin select count(*) into n from public.categories where user_id='a1000000-0000-4000-8000-000000000001' and is_default; if n<>20 then raise exception 'Default categories not idempotent'; end if; end $$;
 -- Each syncable table has an owner policy and RLS, independently of grants.
 reset role;
 do $$ declare tbl text; n int; begin

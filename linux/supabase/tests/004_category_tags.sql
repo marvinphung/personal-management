@@ -11,7 +11,7 @@ begin
  perform public.finance_defaults();
  if (select count(*) from public.tags)<>before_count then raise exception 'Duplicate tag defaults'; end if;
  if exists(select 1 from public.tags where category_id is null or name !~ '^[a-z0-9]{1,80}$') then raise exception 'Invalid default tag'; end if;
- if not exists(select 1 from public.categories where name='Cho vay') then raise exception 'Lending category missing'; end if;
+ if not exists(select 1 from public.categories where name='Công nợ' and type='expense') then raise exception 'Lending category missing'; end if;
  select id into food from public.categories where name='Ăn uống' and type='expense';
  if not exists(select 1 from public.tags where category_id=food and name='caphe') then raise exception 'Food suggestions missing'; end if;
  body=jsonb_build_object('id',gen_random_uuid(),'user_id',auth.uid(),'name','#Đồ uống mới','category_id',food,

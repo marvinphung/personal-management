@@ -36,9 +36,9 @@ void main() {
       'VND',
     );
     expect(days.length, 29);
-    expect(days[0], 50000);
+    expect(days[0], 51000);
     expect(days[1], 0);
     expect(days[28], 12000);
-    expect(days.reduce((a, b) => a + b), 62000);
+    expect(days.reduce((a, b) => a + b), 63000);
   });
 }

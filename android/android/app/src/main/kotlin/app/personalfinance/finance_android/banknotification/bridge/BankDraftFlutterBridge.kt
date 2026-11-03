@@ -81,6 +81,7 @@ class BankDraftFlutterBridge(private val activity: Activity, messenger: BinaryMe
                                 prefs.all.filterKeys { it.startsWith("balance.") }.values.map { jsonMap(JSONObject(it as String)) }
                             }
                             "count" -> dao.count(owner())
+                            "refreshWidget" -> { owner(); BankInbox.changed(activity); null }
                             "finish" -> {
                                 val status = args["status"] as String
                                 require(status in listOf("confirmed", "ignored"))

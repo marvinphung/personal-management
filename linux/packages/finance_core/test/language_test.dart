@@ -1,4 +1,5 @@
 import 'package:finance_core/app/app.dart';
+import 'package:finance_core/app/settings.dart';
 import 'package:finance_core/app/language.dart';
 import 'package:finance_core/app/providers.dart';
 import 'package:finance_core/app/router.dart';
@@ -160,8 +161,27 @@ void main() {
         expect(tester.takeException(), isNull);
         c.read(routerProvider).go('/settings');
         await tester.pumpAndSettle();
+        final languagePicker = find.byType(LanguagePicker);
+        final settingsScroll = find
+            .descendant(
+              of: find.byType(SettingsScreen),
+              matching: find.byType(Scrollable),
+            )
+            .first;
+        await tester.scrollUntilVisible(
+          languagePicker,
+          300,
+          scrollable: settingsScroll,
+        );
+        await tester.pumpAndSettle();
         expect(find.text('Ngôn ngữ'), findsOneWidget);
-        await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+        await tester.tap(
+          find.byWidgetPredicate(
+            (w) =>
+                w is DropdownButtonFormField<String> &&
+                w.decoration.labelText == 'Ngôn ngữ',
+          ),
+        );
         await tester.pumpAndSettle();
         await tester.tap(find.text('English').last);
         await tester.pumpAndSettle();
@@ -238,6 +258,7 @@ void main() {
         SyncEngine(db, FakeRemote()..offline = true),
       );
       await repo.save(repo.create(Entity.accounts, {'name': 'My Cash'}));
+      await repo.save(repo.create(Entity.categories, {'name': 'Ăn uống'}));
       final c = ProviderContainer(
         overrides: [
           preferencesProvider.overrideWithValue(prefs),
@@ -254,7 +275,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Choose your language\nChọn ngôn ngữ'), findsNothing);
-      await tester.tap(find.widgetWithText(FloatingActionButton, 'Giao dịch'));
+      await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Lưu'));
       await tester.pumpAndSettle();

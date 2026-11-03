@@ -13,6 +13,8 @@ class MonthlyTotals {
 }
 
 class Ledger {
+  static bool countsInTotals(Record t) => !t.deleted && !isScheduled(t);
+
   static bool isScheduled(Record t, {DateTime? now}) =>
       t.data['installment_group'] != null &&
       t.date('occurred_at').isAfter(now ?? DateTime.now());
@@ -52,10 +54,9 @@ class Ledger {
         end = DateTime(month.year, month.month + 1);
     var income = 0, expense = 0;
     for (final t in transactions) {
-      if (t.deleted ||
-          isScheduled(t) ||
+      if (!countsInTotals(t) ||
           t.text('currency') != currency ||
-          t.text('purpose') != 'normal') {
+          t.text('type') == 'transfer') {
         continue;
       }
       final date = t.date('occurred_at');
@@ -72,12 +73,9 @@ class Ledger {
           .where((p) => !p.deleted && p.text('debt_id') == debt.id)
           .fold(0, (s, p) => s + p.money('amount'));
   static String debtStatus(Record debt, Iterable<Record> payments) {
+    if (debt.text('status') == 'completed') return 'completed';
     if (debt.text('status') == 'cancelled') return 'cancelled';
     final left = remaining(debt, payments);
-    return left == 0
-        ? 'paid'
-        : left == debt.money('principal_amount')
-        ? 'active'
-        : 'partially_paid';
+    return left == debt.money('principal_amount') ? 'active' : 'partially_paid';
   }
 }

@@ -88,46 +88,17 @@ void main() {
     );
     expect(await workspace.db.pending(), isNotEmpty);
   });
-  testWidgets(
-    'installment form asks monthly payment and creates six dated expenses',
-    (tester) async {
-      final repo = workspace.repository;
-      await repo.save(repo.create(Entity.accounts, {'name': 'Cash'}));
-      await tester.pumpWidget(
-        wrap(
-          Builder(
-            builder: (context) => TextButton(
-              onPressed: () => showTransactionForm(context),
-              child: const Text('Open'),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Installments'));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, 'Monthly payment'), findsOneWidget);
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Monthly payment'),
-        '100k',
-      );
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
-      final rows = await workspace.db.list(Entity.transactions);
-      expect(rows, hasLength(6));
-      expect(
-        rows.every(
-          (r) => r.money('amount') == 100000 && r.date('occurred_at').day == 24,
-        ),
-        true,
-      );
-      expect(
-        rows.map((r) => r.text('installment_group')).toSet(),
-        hasLength(1),
-      );
-    },
-  );
+  testWidgets('installment controls are absent from the PMV form', (
+    tester,
+  ) async {
+    await workspace.repository.save(
+      workspace.repository.create(Entity.accounts, {'name': 'Cash'}),
+    );
+    await tester.pumpWidget(wrap(const TransactionForm()));
+    await tester.pumpAndSettle();
+    expect(find.text('Installments'), findsNothing);
+    expect(find.text('Monthly payment'), findsNothing);
+  });
   testWidgets(
     'category chips select tags without typing and reset on category change',
     (tester) async {
@@ -154,14 +125,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Ăn uống').last);
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(FilterChip, '#caphe'), findsOneWidget);
-      expect(find.widgetWithText(FilterChip, '#xangxe'), findsNothing);
-      await tester.ensureVisible(find.text('#caphe'));
-      await tester.tap(find.text('#caphe'));
+      expect(find.widgetWithText(FilterChip, '#Cà phê'), findsOneWidget);
+      expect(find.widgetWithText(FilterChip, '#Đổ xăng'), findsNothing);
+      await tester.ensureVisible(find.text('#Cà phê'));
+      await tester.tap(find.text('#Cà phê'));
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<FilterChip>(find.widgetWithText(FilterChip, '#caphe'))
+            .widget<FilterChip>(find.widgetWithText(FilterChip, '#Cà phê'))
             .selected,
         true,
       );
@@ -170,9 +141,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Đi lại').last);
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(FilterChip, '#caphe'), findsNothing);
-      await tester.ensureVisible(find.text('#xangxe'));
-      await tester.tap(find.text('#xangxe'));
+      expect(find.widgetWithText(FilterChip, '#Cà phê'), findsNothing);
+      await tester.ensureVisible(find.text('#Đổ xăng'));
+      await tester.tap(find.text('#Đổ xăng'));
       await tester.enterText(find.widgetWithText(TextField, 'Amount'), '50k');
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
@@ -188,10 +159,13 @@ void main() {
     },
   );
   testWidgets(
-    'Cho vay requires a borrower and creates a debt instead of spending',
+    'Cho vay requires a borrower and creates a linked debt and spending',
     (tester) async {
       final repo = workspace.repository;
-      final category = repo.create(Entity.categories, {'name': 'Cho vay'});
+      final category = repo.create(Entity.categories, {
+        'name': 'Công nợ',
+        'behavior': 'cong_no_expense',
+      });
       final person = repo.create(Entity.people, {'name': 'Nam'});
       await repo.saveBatch([
         category,
@@ -200,7 +174,10 @@ void main() {
       ]);
       await tester.pumpWidget(wrap(const TransactionForm()));
       await tester.pumpAndSettle();
-      expect(find.text('Borrower'), findsOneWidget);
+      await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Cho vay'));
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cho vay'));
+      await tester.pumpAndSettle();
+      expect(find.text('Người liên quan'), findsOneWidget);
       expect(find.text('Installments'), findsNothing);
       await tester.enterText(find.widgetWithText(TextField, 'Amount'), '1m');
       await tester.tap(find.text('Save'));
@@ -210,7 +187,7 @@ void main() {
       final picker = find.byWidgetPredicate(
         (w) =>
             w is DropdownButtonFormField<String> &&
-            w.decoration.labelText == 'Borrower',
+            w.decoration.labelText == 'Người liên quan',
       );
       await tester.ensureVisible(picker);
       await tester.tap(picker);

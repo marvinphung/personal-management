@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../features/bank_import/bank_draft_repository.dart';
 import '../features/bank_import/bank_providers.dart';
-import '../features/bank_import/pending_bank_screen.dart';
+import '../features/bank_import/pmv_bien_dong_screen.dart';
 import '../features/bank_import/bank_import_settings.dart';
 import '../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
@@ -10,9 +10,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/database/record.dart';
 import '../features/auth/auth_screen.dart';
+import '../features/calendar/calendar_screen.dart';
+import '../features/calendar/calendar_settings.dart';
 import '../features/catalog/catalog_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/debts/debt_screen.dart';
+import '../features/investments/investment_screen.dart';
 import '../features/notes/notes_screen.dart';
 import '../features/transactions/transaction_form.dart';
 import '../features/transactions/transaction_screen.dart';
@@ -57,7 +60,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           if (BankDraftRepository.supported) ...[
             GoRoute(
               path: '/transactions/pending',
-              builder: (_, _) => const PendingBankScreen(),
+              builder: (_, _) => const PmvBienDongScreen(),
             ),
             GoRoute(
               path: '/settings/bank-import',
@@ -70,6 +73,22 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
           ],
           GoRoute(path: '/debts', builder: (_, _) => const DebtScreen()),
+          GoRoute(
+            path: '/investments',
+            builder: (_, _) => const InvestmentScreen(),
+          ),
+          GoRoute(
+            path: '/calendar',
+            builder: (_, state) => CalendarScreen(
+              initialDate: state.uri.queryParameters['date'] != null
+                  ? DateTime.tryParse(state.uri.queryParameters['date']!)
+                  : null,
+            ),
+          ),
+          GoRoute(
+            path: '/calendar/settings',
+            builder: (_, _) => const CalendarSettings(),
+          ),
           GoRoute(path: '/notes', builder: (_, _) => const NotesScreen()),
           GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
           GoRoute(path: '/more', builder: (_, _) => const MoreScreen()),
@@ -90,16 +109,27 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(router.dispose);
   return router;
 });
+
+/// Primary 4-tab destinations shown in the bottom NavigationBar.
+const pmvTabs = [
+  ('/', 'Tổng quan', Icons.home_outlined),
+  ('/transactions', 'Thu chi', Icons.receipt_long_outlined),
+  ('/transactions/pending', 'Biến động', Icons.notifications_active_outlined),
+  ('/settings', 'Cài đặt', Icons.settings_outlined),
+];
+
+/// All routable destinations (used for desktop side-rail lookup).
 const destinations = [
-  ('/', 'Dashboard', Icons.dashboard_outlined),
-  ('/transactions', 'Transactions', Icons.receipt_long_outlined),
-  ('/accounts', 'Accounts', Icons.account_balance_wallet_outlined),
-  ('/debts', 'Debts', Icons.handshake_outlined),
-  ('/people', 'People', Icons.people_outline),
-  ('/notes', 'Notes', Icons.notes_outlined),
-  ('/categories', 'Categories', Icons.category_outlined),
-  ('/tags', 'Tags', Icons.tag),
-  ('/settings', 'Settings', Icons.settings_outlined),
+  ('/', 'Tổng quan', Icons.home_outlined),
+  ('/transactions', 'Thu chi', Icons.receipt_long_outlined),
+  ('/transactions/pending', 'Biến động', Icons.notifications_active_outlined),
+  ('/debts', 'Công nợ', Icons.handshake_outlined),
+  ('/investments', 'Đầu tư', Icons.trending_up),
+  ('/calendar', 'Lịch', Icons.calendar_month_outlined),
+  ('/notes', 'Ghi chú', Icons.notes_outlined),
+  ('/categories', 'Danh mục', Icons.category_outlined),
+  ('/tags', 'Thẻ', Icons.tag),
+  ('/settings', 'Cài đặt', Icons.settings_outlined),
 ];
 
 class FinanceShell extends ConsumerWidget {
@@ -135,13 +165,26 @@ class FinanceShell extends ConsumerWidget {
           );
         }
         final desktop = MediaQuery.sizeOf(context).width >= 850;
-        final title =
+        // Determine current title from tab list; fall back to route-based label.
+        final tabTitle =
+            pmvTabs.where((d) => d.$1 == location).firstOrNull?.$2 ??
             destinations.where((d) => d.$1 == location).firstOrNull?.$2 ??
             (location == '/transactions/pending'
-                ? 'Pending transactions'
+                ? 'Biến động'
                 : location.startsWith('/settings/bank-import')
-                ? 'Bank Notification Import'
-                : 'More');
+                ? 'Ngân hàng import'
+                : location);
+
+        // Map current location to tab index (−1 = not a primary tab).
+        final tabPaths = pmvTabs.map((t) => t.$1).toList();
+        // "/transactions/pending" also matches tab index 2.
+        int currentTabIndex = tabPaths.indexOf(location);
+        if (currentTabIndex < 0 && location == '/transactions/pending') {
+          currentTabIndex = 2;
+        }
+
+        final bankCount = ref.watch(bankCountProvider).value ?? 0;
+
         return CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
@@ -154,36 +197,28 @@ class FinanceShell extends ConsumerWidget {
           child: Focus(
             autofocus: true,
             child: Scaffold(
-              appBar: AppBar(
-                title: Text(context.tr(title)),
-                actions: [
-                  if (BankDraftRepository.supported)
-                    IconButton(
-                      tooltip: context.tr('Pending transactions'),
-                      onPressed: () => context.go('/transactions/pending'),
-                      icon: Badge(
-                        label: Text(
-                          '${ref.watch(bankCountProvider).value ?? 0}',
+              appBar:
+                  location.startsWith('/calendar') || location == '/investments'
+                  ? null
+                  : AppBar(
+                      title: Text(context.tr(tabTitle)),
+                      actions: [
+                        IconButton(
+                          tooltip: context.tr('Search (Ctrl+K)'),
+                          onPressed: () => showGlobalSearch(context),
+                          icon: const Icon(Icons.search),
                         ),
-                        child: const Icon(Icons.inbox_outlined),
-                      ),
+                        if (desktop)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 16),
+                            child: FilledButton.icon(
+                              onPressed: () => showTransactionForm(context),
+                              icon: const Icon(Icons.add),
+                              label: Text(context.tr('Giao dịch')),
+                            ),
+                          ),
+                      ],
                     ),
-                  IconButton(
-                    tooltip: context.tr('Search (Ctrl+K)'),
-                    onPressed: () => showGlobalSearch(context),
-                    icon: const Icon(Icons.search),
-                  ),
-                  if (desktop)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 16),
-                      child: FilledButton.icon(
-                        onPressed: () => showTransactionForm(context),
-                        icon: const Icon(Icons.add),
-                        label: Text(context.tr('Transaction')),
-                      ),
-                    ),
-                ],
-              ),
               body: Row(
                 children: [
                   if (desktop)
@@ -194,7 +229,7 @@ class FinanceShell extends ConsumerWidget {
                           Padding(
                             padding: const EdgeInsets.all(20),
                             child: Text(
-                              context.tr('Personal Finance'),
+                              context.tr('Quản lý PMV'),
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                           ),
@@ -219,53 +254,55 @@ class FinanceShell extends ConsumerWidget {
                   Expanded(child: child),
                 ],
               ),
-              floatingActionButton: desktop
+              floatingActionButton:
+                  desktop || !['/', '/transactions'].contains(location)
                   ? null
-                  : FloatingActionButton.extended(
+                  : FloatingActionButton(
                       onPressed: () => showTransactionForm(context),
-                      icon: const Icon(Icons.add),
-                      label: Text(context.tr('Transaction')),
+                      tooltip: context.tr('Giao dịch mới'),
+                      child: const Icon(Icons.add),
                     ),
               bottomNavigationBar: desktop
                   ? null
                   : NavigationBar(
-                      selectedIndex:
-                          [
-                            '/',
-                            '/transactions',
-                            '/debts',
-                            '/notes',
-                          ].contains(location)
-                          ? [
-                              '/',
-                              '/transactions',
-                              '/debts',
-                              '/notes',
-                            ].indexOf(location)
-                          : 4,
-                      onDestinationSelected: (i) => context.go(
-                        ['/', '/transactions', '/debts', '/notes', '/more'][i],
-                      ),
+                      selectedIndex: currentTabIndex < 0 ? 3 : currentTabIndex,
+                      onDestinationSelected: (i) => context.go(pmvTabs[i].$1),
+                      labelBehavior:
+                          NavigationDestinationLabelBehavior.alwaysHide,
                       destinations: [
-                        NavigationDestination(
-                          icon: const Icon(Icons.home_outlined),
-                          label: context.tr('Home'),
+                        // Tab 0: Tổng quan
+                        const NavigationDestination(
+                          icon: Icon(Icons.home_outlined),
+                          selectedIcon: Icon(Icons.home),
+                          label: 'Tổng quan',
                         ),
-                        NavigationDestination(
-                          icon: const Icon(Icons.receipt_long_outlined),
-                          label: context.tr('Transactions'),
+                        // Tab 1: Thu chi
+                        const NavigationDestination(
+                          icon: Icon(Icons.receipt_long_outlined),
+                          selectedIcon: Icon(Icons.receipt_long),
+                          label: 'Thu chi',
                         ),
+                        // Tab 2: Biến động — badge with pending bank draft count.
                         NavigationDestination(
-                          icon: const Icon(Icons.handshake_outlined),
-                          label: context.tr('Debts'),
+                          icon: Badge(
+                            isLabelVisible: bankCount > 0,
+                            label: Text('$bankCount'),
+                            child: const Icon(
+                              Icons.notifications_active_outlined,
+                            ),
+                          ),
+                          selectedIcon: Badge(
+                            isLabelVisible: bankCount > 0,
+                            label: Text('$bankCount'),
+                            child: const Icon(Icons.notifications_active),
+                          ),
+                          label: 'Biến động',
                         ),
-                        NavigationDestination(
-                          icon: const Icon(Icons.notes),
-                          label: context.tr('Notes'),
-                        ),
-                        NavigationDestination(
-                          icon: const Icon(Icons.more_horiz),
-                          label: context.tr('More'),
+                        // Tab 3: Cài đặt
+                        const NavigationDestination(
+                          icon: Icon(Icons.settings_outlined),
+                          selectedIcon: Icon(Icons.settings),
+                          label: 'Cài đặt',
                         ),
                       ],
                     ),
