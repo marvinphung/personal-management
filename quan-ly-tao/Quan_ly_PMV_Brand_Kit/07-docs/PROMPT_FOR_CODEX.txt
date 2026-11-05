@@ -1,0 +1,11 @@
+Bạn là Codex, hãy tích hợp bộ nhận diện Quản lý PMV từ thư mục tài nguyên được cung cấp vào project hiện tại. Trước tiên nhận diện framework thực tế (Web/Vite/Next.js, React Native/Expo, Flutter, native Android, iOS hoặc khác) rồi mới chọn file. Không tự tạo lại logo. Hãy giữ đúng hình heo tiết kiệm, đồng ₫ và chữ "Quản lý PMV" từ ảnh gốc.
+
+Yêu cầu:
+1. Dùng `01-brand/logo-horizontal-transparent.png` làm logo hiển thị ở UI phù hợp, và `01-brand/piggy-mark-transparent-1024.png` làm biểu tượng standalone khi cần.
+2. Cập nhật icon launcher/pwa/favicons/app store bằng `02-app-icons/app-icon-1024.png` hoặc folder nền tảng tương ứng.
+3. Nếu là web/PWA, cấu hình favicon, Apple touch icon, PWA icon 192/512, maskable icon và manifest (sửa đường dẫn phù hợp).
+4. Nếu là Android, cấu hình ic_launcher ở mật độ tương ứng và adaptive icon theo các lớp đã cung cấp; nếu là iOS, cập nhật AppIcon.appiconset.
+5. Đảm bảo icon không bị cắt khi áp mask dạng hình tròn, hiển thị rõ trên light/dark mode.
+6. Xóa/xử lý các logo placeholder hiện có, không xóa nhầm asset đang được sử dụng cho mục đích khác.
+7. Sau khi sửa, hãy build/test nếu môi trường hỗ trợ, báo cáo các file cấu hình đã sửa và cách kiểm tra icon mới trên thiết bị.
+8. Không hardcode đường dẫn sai: hãy khảo sát cấu trúc project trước khi chỉnh sửa.

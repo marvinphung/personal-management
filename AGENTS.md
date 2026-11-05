@@ -2,17 +2,17 @@
 
 Áp dụng cho toàn bộ repository và các thư mục con, trừ quy tắc bổ sung cụ thể hơn. **Đọc file này trước khi phân tích, lập plan, sửa code hoặc viết tài liệu.** Chỉ dẫn trực tiếp mới nhất của người dùng có ưu tiên cao hơn nội dung file; không suy diễn tài liệu lịch sử thành yêu cầu hay ủy quyền mới.
 
-## 1. Xác định đúng dự án và worktree
+## 1. Repository chứa hai app trên main
 
-- Sản phẩm đang được phát triển là **Quản lý PMV**: app cá nhân của một người, chạy trên Samsung Galaxy A54; cloud Supabase, local SQLite/outbox.
-- Code PMV: `android/`, `linux/packages/finance_core/`, `linux/supabase/`. Native Android trong `android/android/`.
-- Repository còn có lịch sử app v2 **Quản lý Tao**, dùng `apps/`, `packages/`, `backend/`, schema `qlt`. Không nhầm app này với PMV hoặc tự mang kiến trúc backend/collector của nó vào PMV.
-- Trước khi sửa, kiểm tra `pwd`, `git status --short`, nhánh hiện tại và `git worktree list`. Nếu checkout hiện tại là app cũ, tìm worktree PMV; không sửa nhầm mã nguồn hoặc tự chuyển nhánh làm mất thay đổi.
-- Tên “v2” từng dùng cho app khác và cũng có thể chỉ UI mới: khi không xác định được bản cần build/cài, hỏi một vấn đề này trước khi cài đè.
+- `quan-ly-tao/`: **Quản lý Tao**, app v2; `apps/`, `packages/`, `backend/`, schema `qlt`.
+- `quan-ly-pmv/`: **Quản lý PMV**, phát triển từ app v1; `android/`, `linux/`, cloud Supabase, SQLite/outbox.
+- Cả hai app ở nhánh `main`. Không chuyển sang worktree PMV cũ để thực hiện tác vụ mới.
+- Trước khi sửa, kiểm tra pwd, git status, nhánh và đọc AGENTS.md của app được giao. Chạy lệnh build/test/script từ root app tương ứng.
+- Không dùng chung cấu hình DB, khóa ký, package hoặc yêu cầu nghiệp vụ giữa hai app. Nếu tên v1/v2 chưa rõ, hỏi từng vấn đề trước khi cài.
 
 ## 2. Tài liệu hiện hành: `docs/` chỉ chứa SRS
 
-Đọc [docs/README.md](docs/README.md), [tổng quan](docs/srs/overview.md), sau đó các phần liên quan trước khi sửa hành vi.
+Đọc `<app>/docs/README.md` và đặc tả của app đó, sau đó các phần liên quan trước khi sửa hành vi.
 
 **Chỉ đặt trong `docs/`:** yêu cầu sản phẩm, tính năng, user story, luồng sử dụng, quy tắc nghiệp vụ, mô hình dữ liệu ở mức đặc tả, danh mục/tag, yêu cầu phi chức năng và tiêu chí nghiệm thu. Đây là đặc tả hiện hành của app, không phải nhật ký thực hiện.
 
@@ -28,7 +28,7 @@
 
 ## 3. Quy tắc bắt buộc cho plan mới
 
-- Mọi plan đặt **trực tiếp trong `./plans/`** tại root của worktree đang sửa. Không dùng `docs/plans/` hoặc plan rải rác ở root/thư mục khác.
+- Mọi plan đặt **trực tiếp trong `./plans/`** tại root repository chung, bên ngoài hai thư mục app. Không dùng `docs/plans/` hoặc plan rải rác ở root/thư mục khác.
 - Tên file: `YYYY-MM-DD_HH-mm-ss-ten-plan.md`, theo **thời điểm tạo thực tế** tại `Asia/Ho_Chi_Minh`.
 - Mỗi plan phải có metadata ở đầu file:
 
@@ -47,27 +47,15 @@ status: proposed
 - Không khôi phục các plan cũ đã được người dùng yêu cầu xóa. `plans/.gitkeep` chỉ giữ thư mục, không phải plan.
 - Không bắt buộc tạo plan cho chỉnh sửa nhỏ. Nếu cần plan cho công việc mới, tạo file mới theo quy tắc trên, không tái sử dụng tài liệu đã xóa.
 
-## 4. Quy tắc sản phẩm phải giữ
+## 4. Quy tắc nghiệp vụ theo từng app
 
-Chi tiết tại [quy tắc nghiệp vụ](docs/srs/business-rules.md); các điểm dễ bị làm sai:
-
-- Bốn tab **Tổng quan / Thu chi / Biến động / Cài đặt**, thanh điều hướng chỉ hiện icon, có tooltip/accessibility label.
-- Mọi thu/chi của Công nợ và Đầu tư **luôn được tính** vào tổng và biểu đồ. Không đưa lại công tắc loại trừ khỏi tổng. Chuyển khoản nội bộ không cộng thành thu/chi.
-- Mọi ô tiền tự nhóm hàng nghìn bằng dấu phẩy khi nhập; giữ tính toán số nguyên chính xác.
-- Công nợ hai chiều; chọn khoản liên quan khi thu/trả; cho phép trả vượt gốc; chỉ hoàn tất thủ công và giữ lịch sử.
-- Công nợ có ngày giao dịch chọn lùi được, hạn trả riêng/tùy chọn, tài khoản thanh toán tùy chọn. Sửa ngày/số tiền phải cập nhật nhất quán giao dịch liên kết.
-- Chọn/thêm người liên quan phải dùng được khi danh sách trống; không làm mất dữ liệu form.
-- Mọi danh mục Chi tiêu có tag **Mua chung**. Thu nhập có **Nhận share bill**, tag theo tên danh mục Chi tiêu. Tag Mua chung không thay hành động Công nợ bắt buộc.
-- Đầu tư và Công nợ mở từ Cài đặt. Khoản Đầu tư thu về gồm cả gốc+lãi.
-- Nguồn thông tin ngân hàng đã xác nhận là read-only; Undo bỏ qua tồn tại 3 giây và bền qua khởi động lại.
-- Lịch Google chỉ đọc, mặc định tháng, tuần từ thứ Hai, không ngày âm; giữ widget Lịch 4×2 và Biến động 2×2.
-- Không đưa lại trả góp hoặc số dư do thông báo ngân hàng cung cấp vào giao diện. Số dư tính từ sổ giao dịch trong quản lý tài khoản là khái niệm khác.
+Đọc AGENTS.md và docs/ của đúng app. Các quy tắc PMV chỉ có hiệu lực trong quan-ly-pmv/; không áp dụng sang Quản lý Tao. Tài liệu đã chuyển vào reference/ chỉ là lịch sử.
 
 ## 5. Cách triển khai và kiểm chứng
 
 - Giữ nguyên thay đổi chưa commit của người dùng/agent khác. Không reset hoặc ghi đè cả file để tiện làm.
 - Tìm nguyên nhân trước khi sửa lỗi. Sửa theo phạm vi được giao; không thêm tính năng hoặc đổi DB/API chỉ để làm UI.
-- Flutter dùng chung: chạy test/analyze từ `linux/packages/finance_core/`. Android launcher: từ `android/`. Build release bằng `python3 linux/tool/build_apk.py` khi cần và được giao.
+- PMV: chạy test/analyze từ `quan-ly-pmv/linux/packages/finance_core/`, launcher từ `quan-ly-pmv/android/`; script build từ root app PMV. Tao: dùng tool/ và package của quan-ly-tao/.
 - Chạy kiểm tra phù hợp với phần thay đổi, giữ assertion nghiệp vụ; chỉ đổi selector khi UI thực sự đổi. Không bỏ test để làm kết quả xanh.
 - Chỉ sửa tài liệu: kiểm tra liên kết, cấu trúc và nội dung; không cần build/test app.
 - Nếu người dùng phân công “chỉ sửa UI, không test/build”, tuân thủ và bàn giao đúng `NOT RUN`; agent nghiệm thu sau mới chạy kiểm tra.

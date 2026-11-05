@@ -56,3 +56,8 @@ apps/user_app/signing/
 *.deb
 
 **/.kotlin/
+
+# Private verification data and app-local credentials
+**/artifacts/
+**/signing/
+**/.venv/

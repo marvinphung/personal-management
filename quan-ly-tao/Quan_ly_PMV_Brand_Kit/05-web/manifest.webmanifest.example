@@ -1,0 +1,36 @@
+{
+  "name": "Quản lý PMV",
+  "short_name": "PMV",
+  "description": "Ứng dụng quản lý chi tiêu cá nhân",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#EFFCF9",
+  "theme_color": "#00675F",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/pwa-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
