@@ -3,6 +3,10 @@ import '../core/localization/app_language.dart';
 import '../core/utils/money.dart';
 import 'theme.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AppPage
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Standard page wrapper providing responsive max-width, padding, and safe area.
 class AppPage extends StatelessWidget {
   final Widget child;
@@ -38,7 +42,12 @@ class AppPage extends StatelessWidget {
   }
 }
 
-/// Standard section header with uppercase title and optional trailing action.
+// ─────────────────────────────────────────────────────────────────────────────
+// SectionHeader
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Section header với title dạng thường (không uppercase — dễ đọc tiếng Việt)
+/// và optional trailing action.
 class SectionHeader extends StatelessWidget {
   final String title;
   final Widget? trailing;
@@ -49,17 +58,19 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      padding: const EdgeInsets.only(top: 20, bottom: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-              color: colors.textSecondary,
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+                color: colors.textSecondary,
+              ),
             ),
           ),
           trailing ?? const SizedBox.shrink(),
@@ -69,7 +80,12 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-/// Prominent summary card displaying current month balance, total income, and total expense.
+// ─────────────────────────────────────────────────────────────────────────────
+// SummaryCard
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Thẻ tổng quan tháng — hiển thị dòng tiền ròng, thu và chi.
+/// Số tiền dùng tabular figures, tương phản rõ ràng.
 class SummaryCard extends StatelessWidget {
   final int balanceMinor;
   final int incomeMinor;
@@ -89,119 +105,114 @@ class SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Card(
-      clipBehavior: Clip.antiAlias,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPositive = balanceMinor >= 0;
+
+    // Màu nền card theo dòng tiền
+    final cardBg = isDark
+        ? (isPositive
+              ? colors.primaryAccent.withValues(alpha: 0.08)
+              : colors.expense.withValues(alpha: 0.06))
+        : colors.bgSurface;
+
+    final netColor = isPositive ? colors.income : colors.expense;
+
+    return Material(
+      color: cardBg,
+      borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: colors.borderSubtle),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                context.tr('Net cash flow').toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: colors.textSecondary,
-                ),
+              // Label
+              Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: netColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    context.tr('Dòng tiền tháng'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
+
+              // Số tiền ròng — lớn, nổi bật
               Text(
                 Money.format(balanceMinor, currency),
                 style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1,
                   fontFeatures: const [FontFeature.tabularFigures()],
-                  color: colors.textPrimary,
+                  color: netColor,
                 ),
               ),
+              if (balanceMinor < 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'Bội chi tháng này',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colors.expense.withValues(alpha: 0.8),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+
               const SizedBox(height: 16),
+
+              // Thu / Chi row
               Container(
-                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: colors.bgElevated,
-                  borderRadius: BorderRadius.circular(12),
+                  color: isDark ? colors.bgElevated : const Color(0xFFF0FAF8),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Row(
                   children: [
+                    // Thu nhập
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.arrow_downward,
-                                size: 14,
-                                color: colors.income,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                context.tr('Income'),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            Money.format(incomeMinor, currency),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                              color: colors.income,
-                            ),
-                          ),
-                        ],
+                      child: _MetricCell(
+                        icon: Icons.south_rounded,
+                        iconColor: colors.income,
+                        label: context.tr('Income'),
+                        value: Money.format(incomeMinor, currency),
+                        valueColor: colors.income,
+                        isLeft: true,
                       ),
                     ),
-                    Container(width: 1, height: 32, color: colors.borderSubtle),
-                    const SizedBox(width: 16),
+                    // Divider dọc
+                    Container(width: 1, height: 40, color: colors.borderSubtle),
+                    // Chi tiêu
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.arrow_upward,
-                                size: 14,
-                                color: colors.expense,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                context.tr('Expense'),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            Money.format(expenseMinor, currency),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                              color: colors.expense,
-                            ),
-                          ),
-                        ],
+                      child: _MetricCell(
+                        icon: Icons.north_rounded,
+                        iconColor: colors.expense,
+                        label: context.tr('Expense'),
+                        value: Money.format(expenseMinor, currency),
+                        valueColor: colors.expense,
+                        isLeft: false,
                       ),
                     ),
                   ],
@@ -214,6 +225,80 @@ class SummaryCard extends StatelessWidget {
     );
   }
 }
+
+class _MetricCell extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final String value;
+  final Color valueColor;
+  final bool isLeft;
+
+  const _MetricCell({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.value,
+    required this.valueColor,
+    required this.isLeft,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: isLeft ? 14 : 12,
+        right: isLeft ? 12 : 14,
+        top: 12,
+        bottom: 12,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 14, color: iconColor),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: valueColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MoneyText
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Money formatted text with semantic color for income/expense and tabular figures.
 class MoneyText extends StatelessWidget {
@@ -245,7 +330,12 @@ class MoneyText extends StatelessWidget {
     return Text(
       '$prefix${Money.format(amountMinor, currency)}',
       style:
-          (style ?? const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))
+          (style ??
+                  TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ))
               .copyWith(
                 color: color,
                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -253,6 +343,10 @@ class MoneyText extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SettingsGroup
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Grouped container for settings or form tiles.
 class SettingsGroup extends StatelessWidget {
@@ -271,11 +365,11 @@ class SettingsGroup extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 8, top: 16),
             child: Text(
-              title!.toUpperCase(),
+              title!,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
+                letterSpacing: 0.4,
                 color: colors.textSecondary,
               ),
             ),
@@ -296,8 +390,8 @@ class SettingsGroup extends StatelessWidget {
                   Divider(
                     height: 1,
                     thickness: 1,
-                    indent: 16,
-                    endIndent: 16,
+                    indent: 56, // thụt lề phù hợp với leading icon 24dp
+                    endIndent: 0,
                     color: colors.borderSubtle,
                   ),
               ],
@@ -305,6 +399,165 @@ class SettingsGroup extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StatMetricTile — widget nhỏ hiển thị 1 chỉ số (dùng trong dashboard)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class StatMetricTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+
+  const StatMetricTile({
+    super.key,
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.onTap,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: colors.bgSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colors.borderSubtle),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: colors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: valueColor ?? colors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (trailing != null) ...[const SizedBox(width: 4), trailing!],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TransactionLeadingIcon — icon avatar cho giao dịch
+// ─────────────────────────────────────────────────────────────────────────────
+
+class TransactionLeadingIcon extends StatelessWidget {
+  final String type; // 'income', 'expense', 'transfer'
+  final double size;
+
+  const TransactionLeadingIcon({super.key, required this.type, this.size = 40});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final (color, icon) = switch (type) {
+      'income' => (colors.income, Icons.south_rounded),
+      'transfer' => (colors.textMuted, Icons.swap_horiz_rounded),
+      _ => (colors.expense, Icons.north_rounded),
+    };
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(size * 0.28),
+      ),
+      child: Icon(icon, color: color, size: size * 0.45),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PmvDivider — divider mảnh giữa các nhóm ngày trong danh sách
+// ─────────────────────────────────────────────────────────────────────────────
+
+class PmvDivider extends StatelessWidget {
+  const PmvDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(height: 1, thickness: 1, color: context.colors.borderSubtle);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DateGroupHeader — header nhóm ngày trong danh sách giao dịch
+// ─────────────────────────────────────────────────────────────────────────────
+
+class DateGroupHeader extends StatelessWidget {
+  final String date;
+  final String? totalAmount; // optional: tổng chi trong ngày
+
+  const DateGroupHeader({super.key, required this.date, this.totalAmount});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 6),
+      color: colors.bgCanvas,
+      child: Row(
+        children: [
+          Text(
+            date,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: colors.textSecondary,
+              letterSpacing: 0.2,
+            ),
+          ),
+          if (totalAmount != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              totalAmount!,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: colors.textMuted,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

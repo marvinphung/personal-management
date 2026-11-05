@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/localization/app_language.dart';
+import '../../app/theme.dart';
 import '../../core/utils/money.dart';
 
 class SpendingChart extends StatefulWidget {
@@ -30,34 +30,90 @@ class _SpendingChartState extends State<SpendingChart> {
   @override
   Widget build(BuildContext context) {
     final peak = widget.days.fold<int>(0, (a, b) => a > b ? a : b);
-    final colors = Theme.of(context).colorScheme;
+    final colors = context.colors;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              context.tr('Daily spending'),
-              style: Theme.of(context).textTheme.titleLarge,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: colors.primaryAccent,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Chi tiêu theo ngày',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (peak > 0)
+                  Text(
+                    'Cao nhất: ${Money.format(peak, widget.currency)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: colors.textSecondary,
+                    ),
+                  ),
+              ],
             ),
-            Text(
-              '${context.tr('Highest day')}: ${Money.format(peak, widget.currency)}',
-            ),
-            const SizedBox(height: 8),
-            Text(
-              selected == null
-                  ? context.tr(
-                      'Tap a day to see its spending. Swipe to see all days.',
-                    )
-                  : '${selected! + 1}/${widget.month.month}/${widget.month.year} · ${Money.format(widget.days[selected!], widget.currency)}',
+            const SizedBox(height: 10),
+
+            // Selected day info pill
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected == null
+                    ? colors.bgElevated
+                    : colors.primaryAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                selected == null
+                    ? 'Chạm vào cột ngày để xem số tiền chi tiêu.'
+                    : 'Ngày ${selected! + 1}/${widget.month.month}/${widget.month.year} · ${Money.format(widget.days[selected!], widget.currency)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selected == null
+                      ? FontWeight.normal
+                      : FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: selected == null
+                      ? colors.textSecondary
+                      : colors.primaryAccent,
+                ),
+              ),
             ),
             const SizedBox(height: 16),
+
             LayoutBuilder(
               builder: (context, constraints) {
                 final width = (constraints.maxWidth / widget.days.length).clamp(
                   36.0,
-                  80.0,
+                  70.0,
                 );
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -65,46 +121,61 @@ class _SpendingChartState extends State<SpendingChart> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: List.generate(widget.days.length, (i) {
                       final amount = widget.days[i];
+                      final isSelected = selected == i;
                       final label =
-                          '${i + 1}/${widget.month.month}: ${Money.format(amount, widget.currency)}';
+                          'Ngày ${i + 1}/${widget.month.month}: ${Money.format(amount, widget.currency)}';
                       return Semantics(
                         button: true,
                         label: label,
-                        selected: selected == i,
+                        selected: isSelected,
                         child: Tooltip(
                           message: label,
                           child: InkWell(
                             onTap: () => setState(() => selected = i),
+                            borderRadius: BorderRadius.circular(6),
                             child: SizedBox(
                               width: width,
                               child: Column(
                                 children: [
                                   SizedBox(
-                                    height: 150,
+                                    height: 130,
                                     child: Align(
                                       alignment: Alignment.bottomCenter,
                                       child: Container(
-                                        width: width - 12,
+                                        width: width - 14,
                                         height: peak == 0 || amount == 0
-                                            ? 2
-                                            : (amount / peak * 150)
-                                                  .clamp(3, 150)
+                                            ? 3
+                                            : (amount / peak * 130)
+                                                  .clamp(4, 130)
                                                   .toDouble(),
                                         decoration: BoxDecoration(
-                                          color: selected == i
-                                              ? colors.tertiary
+                                          color: isSelected
+                                              ? PmvColors.brandGold
                                               : amount == 0
-                                              ? colors.outlineVariant
-                                              : colors.primary,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
+                                              ? colors.borderSubtle
+                                              : colors.primaryAccent,
+                                          borderRadius:
+                                              const BorderRadius.vertical(
+                                                top: Radius.circular(5),
+                                                bottom: Radius.circular(2),
+                                              ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text('${i + 1}'),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '${i + 1}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: isSelected
+                                          ? colors.primaryAccent
+                                          : colors.textSecondary,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -119,7 +190,12 @@ class _SpendingChartState extends State<SpendingChart> {
             if (peak == 0)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Text(context.tr('No expenses this month.')),
+                child: Center(
+                  child: Text(
+                    'Chưa có chi tiêu nào trong tháng này.',
+                    style: TextStyle(color: colors.textMuted, fontSize: 13),
+                  ),
+                ),
               ),
           ],
         ),

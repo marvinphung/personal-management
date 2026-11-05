@@ -34,7 +34,6 @@ class DashboardScreen extends ConsumerWidget {
       value: ref.watch(monthTransactionsProvider),
       builder: (rows) {
         final totals = Ledger.monthly(rows, month, currency);
-        // Apply the same totals policy to category/tag breakdowns.
         final spending = rows.where(
           (t) =>
               t.text('currency') == currency &&
@@ -47,7 +46,7 @@ class DashboardScreen extends ConsumerWidget {
           final cat = categories
               .where((c) => c.id == t.text('category_id'))
               .firstOrNull;
-          final name = cat?.text('name') ?? context.tr('Uncategorized');
+          final name = cat?.text('name') ?? context.tr('Chưa phân loại');
           byCategory.update(
             name,
             (v) => v + t.money('amount'),
@@ -84,304 +83,404 @@ class DashboardScreen extends ConsumerWidget {
             .fold(0, (sum, d) => sum + Ledger.remaining(d, payments));
 
         return ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.only(bottom: 100),
           children: [
-            // Month selector
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: MonthSelector(),
+            // ── Month selector ───────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              child: const Align(
+                alignment: Alignment.centerLeft,
+                child: MonthSelector(),
+              ),
             ),
-            const SizedBox(height: 12),
 
-            // Full-width Summary Card
-            SummaryCard(
-              balanceMinor: totals.net,
-              incomeMinor: totals.income,
-              expenseMinor: totals.expense,
-              currency: currency,
+            // ── Summary card ──────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SummaryCard(
+                balanceMinor: totals.net,
+                incomeMinor: totals.income,
+                expenseMinor: totals.expense,
+                currency: currency,
+              ),
             ),
-            const SizedBox(height: 12),
 
-            // Secondary metrics row: Saving rate & Debts
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
+            // ── Secondary metrics: Saving rate + Debts ────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: StatMetricTile(
+                      label: context.tr('Tỉ lệ tiết kiệm'),
+                      value: totals.savingRate,
+                      valueColor: totals.net >= 0
+                          ? colors.income
+                          : colors.expense,
                     ),
-                    decoration: BoxDecoration(
-                      color: colors.bgSurface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: colors.borderSubtle),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: StatMetricTile(
+                      label: 'Cho vay còn lại',
+                      value: Money.format(outstanding('lent'), currency),
+                      valueColor: colors.income,
+                      onTap: () => context.go('/debts'),
+                      trailing: Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: colors.textMuted,
+                      ),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: StatMetricTile(
+                      label: 'Vay nợ còn lại',
+                      value: Money.format(outstanding('borrowed'), currency),
+                      valueColor: colors.expense,
+                      onTap: () => context.go('/debts'),
+                      trailing: Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: colors.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Daily spending chart ───────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              child: SpendingChart(
+                days: dailySpending(rows, month, currency),
+                month: month,
+                currency: currency,
+              ),
+            ),
+
+            // ── Expense by category ────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SectionHeader(title: context.tr('Chi tiêu theo danh mục')),
+            ),
+            if (categoryTotals.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  context.tr(
+                    'Thống kê chi tiêu sẽ hiển thị sau khi bạn ghi khoản đầu tiên.',
+                  ),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                ),
+              )
+            else
+              _CategoryBreakdown(
+                entries: categoryTotals,
+                totalExpense: totals.expense,
+                currency: currency,
+              ),
+
+            // ── Category chart (pie/bar) ───────────────────────────────────
+            if (categoryTotals.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: CategoryChart(
+                  entries: categoryTotals,
+                  currency: currency,
+                ),
+              ),
+
+            // ── Expense by tag ─────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SectionHeader(title: context.tr('Chi tiêu theo thẻ')),
+            ),
+            if (tagTotals.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  context.tr('Chưa có chi tiêu nào được gắn thẻ tháng này.'),
+                  style: TextStyle(color: colors.textMuted, fontSize: 13),
+                ),
+              )
+            else
+              _TagBreakdown(
+                entries: tagTotals,
+                totalExpense: totals.expense,
+                currency: currency,
+              ),
+
+            // ── Recent transactions ────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SectionHeader(
+                title: context.tr('Giao dịch gần đây'),
+                trailing: rows.isNotEmpty
+                    ? TextButton(
+                        onPressed: () => context.go('/transactions'),
+                        child: Text(
+                          context.tr('Xem tất cả'),
+                          style: TextStyle(color: colors.primaryAccent),
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: OutlinedButton.icon(
+                  onPressed: () => showTransactionForm(context),
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text(context.tr('Ghi khoản đầu tiên')),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    for (final t in rows.take(8))
+                      _RecentTransactionTile(
+                        transaction: t,
+                        onTap: () => showTransactionDetail(context, t),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _CategoryBreakdown
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CategoryBreakdown extends StatelessWidget {
+  final List<MapEntry<String, int>> entries;
+  final int totalExpense;
+  final String currency;
+
+  const _CategoryBreakdown({
+    required this.entries,
+    required this.totalExpense,
+    required this.currency,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Column(
+        children: [
+          for (final entry in entries) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Row(
+                children: [
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          context.tr('Saving rate'),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colors.textSecondary,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                entry.key,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              Money.format(entry.value, currency),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          totals.savingRate,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: totals.net >= 0
-                                ? colors.income
-                                : colors.expense,
+                        const SizedBox(height: 5),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: totalExpense == 0
+                                ? 0
+                                : (entry.value / totalExpense).clamp(0.0, 1.0),
+                            minHeight: 4,
+                            backgroundColor: colors.borderSubtle,
+                            color: colors.primaryAccent,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => context.go('/debts'),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.bgSurface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: colors.borderSubtle),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Cho vay còn lại',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            Money.format(outstanding('lent'), currency),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: colors.income,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => context.go('/debts'),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.bgSurface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: colors.borderSubtle),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Vay nợ còn lại',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            Money.format(outstanding('borrowed'), currency),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: colors.expense,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 20),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
-            // Daily Spending Chart
-            SpendingChart(
-              days: dailySpending(rows, month, currency),
-              month: month,
-              currency: currency,
-            ),
-            const SizedBox(height: 20),
+// ─────────────────────────────────────────────────────────────────────────────
+// _TagBreakdown
+// ─────────────────────────────────────────────────────────────────────────────
 
-            // Expense by category
-            SectionHeader(title: context.tr('Expense by category')),
-            CategoryChart(entries: categoryTotals, currency: currency),
-            if (categoryTotals.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  context.tr(
-                    'Your spending breakdown will appear after your first expense.',
-                  ),
-                  style: TextStyle(color: colors.textSecondary),
-                ),
-              ),
-            for (final entry in categoryTotals)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  entry.key,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: LinearProgressIndicator(
-                    value: totals.expense == 0
-                        ? 0
-                        : entry.value / totals.expense,
-                    backgroundColor: colors.borderSubtle,
-                    color: colors.primaryAccent,
-                  ),
-                ),
-                trailing: Text(
-                  Money.format(entry.value, currency),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 16),
+class _TagBreakdown extends StatelessWidget {
+  final List<MapEntry<String, int>> entries;
+  final int totalExpense;
+  final String currency;
 
-            // Expense by tag
-            SectionHeader(title: context.tr('Expense by tag')),
-            if (tagTotals.isEmpty)
-              Text(
-                context.tr('No tagged expenses this month.'),
-                style: TextStyle(color: colors.textMuted),
-              ),
-            for (final entry in tagTotals)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  '#${entry.key}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: LinearProgressIndicator(
-                    value: totals.expense == 0
-                        ? 0
-                        : (entry.value / totals.expense).clamp(0, 1),
-                    backgroundColor: colors.borderSubtle,
-                    color: colors.primaryAccent,
-                  ),
-                ),
-                trailing: Text(
-                  Money.format(entry.value, currency),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 20),
+  const _TagBreakdown({
+    required this.entries,
+    required this.totalExpense,
+    required this.currency,
+  });
 
-            // Recent transactions
-            SectionHeader(
-              title: context.tr('Recent transactions'),
-              trailing: rows.isNotEmpty
-                  ? TextButton(
-                      onPressed: () => context.go('/transactions'),
-                      child: Text(
-                        context.tr('View all'),
-                        style: TextStyle(color: colors.primaryAccent),
-                      ),
-                    )
-                  : null,
-            ),
-            if (rows.isEmpty)
-              TextButton.icon(
-                onPressed: () => showTransactionForm(context),
-                icon: const Icon(Icons.add),
-                label: Text(context.tr('Record your first expense')),
-              ),
-            for (final t in rows.take(8))
-              Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color:
-                          (t.text('type') == 'income'
-                                  ? colors.income
-                                  : colors.expense)
-                              .withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      t.text('type') == 'income'
-                          ? Icons.arrow_downward_rounded
-                          : Icons.arrow_upward_rounded,
-                      color: t.text('type') == 'income'
-                          ? colors.income
-                          : colors.expense,
-                      size: 20,
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Column(
+        children: [
+          for (final entry in entries)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '#${entry.key}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: colors.primaryAccent,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              Money.format(entry.value, currency),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: totalExpense == 0
+                                ? 0
+                                : (entry.value / totalExpense).clamp(0.0, 1.0),
+                            minHeight: 4,
+                            backgroundColor: colors.borderSubtle,
+                            color: colors.primaryAccent.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  title: Text(
-                    t.text('description').isEmpty
-                        ? context.tr(t.text('type'))
-                        : t.text('description'),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _RecentTransactionTile
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RecentTransactionTile extends StatelessWidget {
+  final Record transaction;
+  final VoidCallback onTap;
+
+  const _RecentTransactionTile({
+    required this.transaction,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = transaction;
+    final colors = context.colors;
+    final type = t.text('type');
+    final description = t.text('description');
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            TransactionLeadingIcon(type: type),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    description.isEmpty ? context.tr(type) : description,
                     style: TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: colors.textPrimary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: Text(
+                  const SizedBox(height: 2),
+                  Text(
                     t.text('purpose') == 'normal'
-                        ? context.tr(t.text('type'))
-                        : context.tr('Debt cash movement'),
+                        ? context.tr(type)
+                        : context.tr('Công nợ / Đầu tư'),
                     style: TextStyle(fontSize: 12, color: colors.textSecondary),
                   ),
-                  trailing: MoneyText(
-                    amountMinor: t.money('amount'),
-                    currency: t.text('currency'),
-                    direction: t.text('type'),
-                  ),
-                  onTap: () => showTransactionDetail(context, t),
-                ),
+                ],
               ),
-            const SizedBox(height: 80),
+            ),
+            const SizedBox(width: 8),
+            MoneyText(
+              amountMinor: t.money('amount'),
+              currency: t.text('currency'),
+              direction: type,
+            ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }

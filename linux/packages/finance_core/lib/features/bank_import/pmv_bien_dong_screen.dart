@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../app/widgets.dart';
 import '../../core/utils/money.dart';
 import '../../core/utils/tag_display.dart';
@@ -94,33 +95,96 @@ class _PmvBienDongScreenState extends ConsumerState<PmvBienDongScreen> {
     final drafts = ref.watch(bankDraftPageProvider(offset));
     final count = ref.watch(bankCountProvider).value;
     final undo = ref.watch(undoControllerProvider);
+    final colors = context.colors;
+
     return Column(
       children: [
+        // ── Undo banner ──────────────────────────────────────────────────
         if (undo?.slot != null)
-          ListTile(
-            dense: true,
-            title: Text(undo!.error ?? 'Đã bỏ qua giao dịch'),
-            trailing: undo.slot!.isExpired
-                ? null
-                : TextButton(
-                    onPressed: () => undo.undo(undo.slot!.draftId),
-                    child: const Text('Hoàn tác'),
+          Material(
+            color: colors.bgElevated,
+            child: ListTile(
+              dense: true,
+              leading: Icon(
+                Icons.undo_rounded,
+                size: 18,
+                color: colors.primaryAccent,
+              ),
+              title: Text(
+                undo!.error ?? 'Đã bỏ qua giao dịch',
+                style: TextStyle(fontSize: 13, color: colors.textPrimary),
+              ),
+              trailing: undo.slot!.isExpired
+                  ? null
+                  : TextButton(
+                      onPressed: () => undo.undo(undo.slot!.draftId),
+                      child: const Text('Hoàn tác'),
+                    ),
+            ),
+          ),
+
+        // ── Header ───────────────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Biến động ngân hàng',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Phân loại để lưu vào sổ tài chính',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (count != null && count > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
                   ),
+                  decoration: BoxDecoration(
+                    color: colors.expense.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$count chờ xử lý',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: colors.expense,
+                    ),
+                  ),
+                ),
+            ],
           ),
-        ListTile(
-          title: const Text('Biến động ngân hàng'),
-          subtitle: const Text(
-            'Giao dịch nhận từ ứng dụng ngân hàng. Phân loại để lưu vào sổ tài chính.',
-          ),
-          trailing: Text(count?.toString() ?? '…'),
         ),
+
+        // ── List ─────────────────────────────────────────────────────────
         Expanded(
           child: drafts.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (_, _) => Center(
-              child: TextButton(
-                onPressed: () => ref.invalidate(bankDraftPageProvider),
-                child: const Text('Thử lại'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: colors.textMuted),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => ref.invalidate(bankDraftPageProvider),
+                    child: const Text('Thử lại'),
+                  ),
+                ],
               ),
             ),
             data: (rows) {
@@ -137,13 +201,37 @@ class _PmvBienDongScreenState extends ConsumerState<PmvBienDongScreen> {
                   await ref.read(bankDraftPageProvider(offset).future);
                 },
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
                   physics: const AlwaysScrollableScrollPhysics(),
                   children: [
                     if (visible.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text('Không có giao dịch nào đang chờ.'),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 48),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: colors.bgElevated,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 32,
+                                color: colors.income,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Không có giao dịch nào đang chờ',
+                              style: TextStyle(
+                                color: colors.textSecondary,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     for (final draft in visible)
                       _DraftCard(
@@ -152,20 +240,23 @@ class _PmvBienDongScreenState extends ConsumerState<PmvBienDongScreen> {
                         onIgnore: () => _ignore(draft),
                         onClassify: () => _classify(draft),
                       ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      spacing: 8,
                       children: [
-                        TextButton(
+                        TextButton.icon(
                           onPressed: offset == 0
                               ? null
                               : () => setState(() => offset -= 100),
-                          child: const Text('Trang trước'),
+                          icon: const Icon(Icons.chevron_left, size: 18),
+                          label: const Text('Trang trước'),
                         ),
-                        TextButton(
+                        TextButton.icon(
                           onPressed: rows.length < 100
                               ? null
                               : () => setState(() => offset += 100),
-                          child: const Text('Trang sau'),
+                          icon: const Icon(Icons.chevron_right, size: 18),
+                          label: const Text('Trang sau'),
                         ),
                       ],
                     ),
@@ -198,70 +289,172 @@ class _DraftCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sign = draft.direction == 'income'
+    final colors = context.colors;
+    final isIncome = draft.direction == 'income';
+    final isExpense = draft.direction == 'expense';
+    final amountColor = isIncome
+        ? colors.income
+        : isExpense
+        ? colors.expense
+        : colors.textSecondary;
+    final sign = isIncome
         ? '+'
-        : draft.direction == 'expense'
+        : isExpense
         ? '−'
         : '?';
-    final color = draft.direction == 'income'
-        ? Colors.green.shade700
-        : draft.direction == 'expense'
-        ? Colors.red.shade700
-        : null;
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Bank source chip
-            Chip(
-              label: Text(draft.bankName),
-              visualDensity: VisualDensity.compact,
-              avatar: const Icon(Icons.account_balance, size: 16),
+            // Bank source + direction indicator
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.bgElevated,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: colors.borderSubtle),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.account_balance_outlined,
+                        size: 12,
+                        color: colors.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        draft.bankName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Direction pill
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: amountColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    isIncome
+                        ? 'Tiền vào'
+                        : isExpense
+                        ? 'Tiền ra'
+                        : 'Không rõ',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: amountColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
+
+            // Amount — lớn và nổi bật
             Text(
               '$sign${Money.format(draft.amountMinor, draft.currency)}',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.bold,
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: amountColor,
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              '${draft.bankName} · ${_dateLabel(draft.occurredAt)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (draft.occurredAtSource == 'notification_post_time')
-              Text(
-                'Thời gian ước tính từ thông báo; vui lòng kiểm tra lại.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
+
+            // Time
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule_outlined,
+                  size: 12,
+                  color: colors.textMuted,
                 ),
-              ),
+                const SizedBox(width: 4),
+                Text(
+                  _dateLabel(draft.occurredAt),
+                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                ),
+                if (draft.occurredAtSource == 'notification_post_time') ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.warning.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'Thời gian ước tính',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: colors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+
+            // Description
             if (draft.description.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
                 draft.description,
-                style: Theme.of(context).textTheme.bodySmall,
+                style: TextStyle(fontSize: 13, color: colors.textSecondary),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-            const SizedBox(height: 12),
+
+            const SizedBox(height: 14),
+
+            // Actions
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(
+                OutlinedButton(
                   onPressed: busy ? null : onIgnore,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(80, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
                   child: const Text('Bỏ qua'),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(
+                FilledButton.icon(
                   onPressed: busy ? null : onClassify,
-                  child: const Text('Phân loại'),
+                  icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+                  label: const Text('Phân loại'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(120, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
                 ),
               ],
             ),
@@ -528,8 +721,8 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
 
     final sign = direction == 'income' ? '+' : '−';
     final amountColor = direction == 'income'
-        ? Colors.green.shade700
-        : Colors.red.shade700;
+        ? context.colors.income
+        : context.colors.expense;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -561,29 +754,60 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                 ),
               ),
 
-              // Header: amount (read-only, large)
-              Text(
-                '$sign${Money.format(widget.draft.amountMinor, widget.draft.currency)}',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: amountColor,
-                  fontWeight: FontWeight.bold,
+              // Header: amount + bank info trong container nổi bật
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: amountColor.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: amountColor.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$sign${Money.format(widget.draft.amountMinor, widget.draft.currency)}',
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: amountColor,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.account_balance_outlined,
+                          size: 12,
+                          color: context.colors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${widget.draft.bankName} · ${_fmtDate(widget.draft.occurredAt)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (widget.draft.description.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.draft.description,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.colors.textSecondary,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              // Bank + time (read-only small)
-              Text(
-                '${widget.draft.bankName} · ${_fmtDate(widget.draft.occurredAt)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (widget.draft.description.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  widget.draft.description,
-                  style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
 
               const SizedBox(height: 20),
               if (needsAccount)

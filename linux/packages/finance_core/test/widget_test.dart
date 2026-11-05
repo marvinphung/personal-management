@@ -66,7 +66,7 @@ void main() {
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    final amount = find.widgetWithText(TextField, 'Amount');
+    final amount = find.byKey(const ValueKey('transaction-amount'));
     expect(tester.widget<TextField>(amount).autofocus, true);
     await tester.enterText(amount, '45k');
     await tester.enterText(
@@ -144,7 +144,10 @@ void main() {
       expect(find.widgetWithText(FilterChip, '#Cà phê'), findsNothing);
       await tester.ensureVisible(find.text('#Đổ xăng'));
       await tester.tap(find.text('#Đổ xăng'));
-      await tester.enterText(find.widgetWithText(TextField, 'Amount'), '50k');
+      await tester.enterText(
+        find.byKey(const ValueKey('transaction-amount')),
+        '50k',
+      );
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       final tx = (await workspace.db.list(Entity.transactions)).single;
@@ -179,7 +182,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Người liên quan'), findsOneWidget);
       expect(find.text('Installments'), findsNothing);
-      await tester.enterText(find.widgetWithText(TextField, 'Amount'), '1m');
+      await tester.enterText(
+        find.byKey(const ValueKey('transaction-amount')),
+        '1m',
+      );
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(find.text('Create or select a person first'), findsOneWidget);

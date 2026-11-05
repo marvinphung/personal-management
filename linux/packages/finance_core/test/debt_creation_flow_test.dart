@@ -65,7 +65,7 @@ void main() {
       ]) {
         await tester.tap(find.text('Open'));
         await tester.pumpAndSettle();
-        final amount = find.widgetWithText(TextField, 'Số tiền gốc');
+        final amount = find.byKey(const ValueKey('debt-amount'));
         await tester.enterText(amount, sample.$2);
         await tester.pumpAndSettle();
         expect(tester.widget<TextField>(amount).controller!.text, sample.$3);

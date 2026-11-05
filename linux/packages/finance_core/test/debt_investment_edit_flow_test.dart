@@ -69,7 +69,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         await tester.tap(
-          find.text(investment ? 'Thêm giao dịch đầu tư' : 'Create debt'),
+          find.text(investment ? 'Thêm giao dịch' : 'Create debt'),
         );
         await tester.pumpAndSettle();
         await tester.enterText(find.byType(TextField).first, '1000000');

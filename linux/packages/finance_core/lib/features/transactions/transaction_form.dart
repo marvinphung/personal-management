@@ -3,6 +3,7 @@ import '../../core/utils/money_input_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../app/widgets.dart';
 import '../../core/database/record.dart';
 import '../../core/localization/app_language.dart';
@@ -106,17 +107,17 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           .where((a) => a.id == (type == 'transfer' ? from : account))
           .firstOrNull;
       if (picked == null) {
-        throw const FormatException('Create or select an account first');
+        throw const FormatException('Vui lòng tạo hoặc chọn tài khoản trước.');
       }
       if (reviewCurrency != null && reviewCurrency != picked.text('currency')) {
-        throw const FormatException('Account currency does not match');
+        throw const FormatException('Loại tiền tệ của tài khoản không khớp.');
       }
       final value = Money.parse(amount.text, currency: picked.text('currency'));
       if (type != 'transfer' && category == null) {
-        throw const FormatException('Choose a category');
+        throw const FormatException('Vui lòng chọn danh mục.');
       }
       if (isCongNo && actionTag == null) {
-        throw const FormatException('Chọn hành động công nợ');
+        throw const FormatException('Vui lòng chọn hành động công nợ.');
       }
 
       await saveAndSync(ref, (repository) async {
@@ -155,7 +156,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           if (!selectedTags.contains(name) &&
               existingTag != null &&
               existingTag.text('category_id') != category) {
-            throw const FormatException('This tag belongs to another category');
+            throw const FormatException('Thẻ này thuộc danh mục khác.');
           }
           chosen.add(
             existingTag ??
@@ -179,7 +180,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           } else if (actionTag == 'Thu nợ' || actionTag == 'Trả nợ') {
             if (targetDebt == null) {
               throw const FormatException(
-                'Vui lòng chọn khoản công nợ cần thanh toán',
+                'Vui lòng chọn khoản công nợ cần thanh toán.',
               );
             }
           }
@@ -231,7 +232,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               .finish(widget.bankDraft!, confirmed: true);
         } catch (_) {
           throw const FormatException(
-            'Transaction saved locally. Retry to close the draft.',
+            'Đã lưu giao dịch vào máy. Vui lòng thử lại để hoàn tất thông báo.',
           );
         }
         ref.invalidate(bankDraftsProvider);
@@ -247,6 +248,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final accountState = ref.watch(recordsProvider(Entity.accounts));
     final categoryState = ref.watch(recordsProvider(Entity.categories));
     final allCategories = categoryState.value ?? [];
@@ -339,12 +341,19 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         )
         .toList();
 
+    final currency =
+        accounts
+            .where((a) => a.id == (type == 'transfer' ? from : account))
+            .firstOrNull
+            ?.text('currency') ??
+        'VND';
+
     return FormDialog(
       title: widget.bankDraft != null
-          ? context.tr('Confirm bank transaction')
+          ? 'Xác nhận giao dịch ngân hàng'
           : widget.record == null
-          ? context.tr('New transaction')
-          : context.tr('Edit transaction'),
+          ? 'Giao dịch mới'
+          : 'Chỉnh sửa giao dịch',
       busy: busy,
       saveEnabled: ready,
       error:
@@ -364,36 +373,191 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       ),
       children: [
         if (widget.bankDraft != null) ...[
-          Text(
-            context.tr(
-              'Review every field before confirming. No currency conversion is performed.',
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colors.primaryAccent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colors.primaryAccent.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, size: 18, color: colors.primaryAccent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Kiểm tra kỹ thông tin trước khi xác nhận. Không có quy đổi tỷ giá.',
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
         ],
-        TextField(
-          controller: amount,
-          inputFormatters: [MoneyInputFormatter(allowNegative: false)],
-          readOnly: bankReadOnly,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: context.tr('Amount'),
-            prefixText: widget.bankDraft != null
-                ? '${widget.bankDraft!.direction == 'income' ? '+' : '−'} '
-                : null,
-            suffixText: accounts
-                .where((a) => a.id == (type == 'transfer' ? from : account))
-                .firstOrNull
-                ?.text('currency'),
+
+        // ── Loại giao dịch (Segmented buttons) ─────────────────────────────
+        if (!bankReadOnly)
+          Container(
+            decoration: BoxDecoration(
+              color: colors.bgElevated,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _TypeButton(
+                    label: 'Chi tiêu',
+                    icon: Icons.north_rounded,
+                    selected: type == 'expense',
+                    activeColor: colors.expense,
+                    onTap: () => setState(() {
+                      type = 'expense';
+                      category = null;
+                      selectedTags.clear();
+                      tagInput.clear();
+                      actionTag = null;
+                      selectedDebtId = null;
+                    }),
+                  ),
+                ),
+                Expanded(
+                  child: _TypeButton(
+                    label: 'Thu nhập',
+                    icon: Icons.south_rounded,
+                    selected: type == 'income',
+                    activeColor: colors.income,
+                    onTap: () => setState(() {
+                      type = 'income';
+                      category = null;
+                      selectedTags.clear();
+                      tagInput.clear();
+                      actionTag = null;
+                      selectedDebtId = null;
+                    }),
+                  ),
+                ),
+                Expanded(
+                  child: _TypeButton(
+                    label: 'Chuyển',
+                    icon: Icons.swap_horiz_rounded,
+                    selected: type == 'transfer',
+                    activeColor: colors.primaryAccent,
+                    onTap: () => setState(() {
+                      type = 'transfer';
+                      category = null;
+                      selectedTags.clear();
+                      tagInput.clear();
+                      actionTag = null;
+                      selectedDebtId = null;
+                    }),
+                  ),
+                ),
+              ],
+            ),
           ),
-          autofocus: widget.bankDraft == null && widget.record == null,
-          textInputAction: TextInputAction.next,
+
+        // ── Ô nhập số tiền lớn ─────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: colors.bgSurface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: colors.borderSubtle),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Số tiền',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (widget.bankDraft != null)
+                    Text(
+                      '${widget.bankDraft!.direction == 'income' ? '+' : '−'} ',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: widget.bankDraft!.direction == 'income'
+                            ? colors.income
+                            : colors.expense,
+                      ),
+                    ),
+                  Expanded(
+                    child: Semantics(
+                      label: context.tr('Amount'),
+                      child: TextField(
+                        key: const ValueKey('transaction-amount'),
+                        controller: amount,
+                        inputFormatters: [
+                          MoneyInputFormatter(allowNegative: false),
+                        ],
+                        readOnly: bankReadOnly,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: type == 'income'
+                              ? colors.income
+                              : type == 'expense'
+                              ? colors.expense
+                              : colors.textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: '0',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          filled: false,
+                        ),
+                        autofocus:
+                            widget.bankDraft == null && widget.record == null,
+                        textInputAction: TextInputAction.next,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.bgElevated,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      currency,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(context.tr('Date')),
-          subtitle: Text(context.dateLabel(occurred)),
-          trailing: const Icon(Icons.calendar_today),
+
+        // ── Ngày giao dịch ─────────────────────────────────────────────────
+        InkWell(
           onTap: bankReadOnly
               ? null
               : () async {
@@ -403,46 +567,76 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),
                   );
-                  if (picked != null) setState(() => occurred = picked);
+                  if (picked != null) {
+                    setState(
+                      () => occurred = DateTime(
+                        picked.year,
+                        picked.month,
+                        picked.day,
+                        occurred.hour,
+                        occurred.minute,
+                      ),
+                    );
+                  }
                 },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: colors.bgSurface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 18,
+                  color: colors.primaryAccent,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ngày giao dịch',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        context.dateLabel(occurred),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!bankReadOnly)
+                  Icon(Icons.chevron_right, size: 18, color: colors.textMuted),
+              ],
+            ),
+          ),
         ),
-        DropdownButtonFormField<String>(
-          initialValue: type,
-          decoration: InputDecoration(labelText: context.tr('Type')),
-          items: [
-            DropdownMenuItem(
-              value: 'expense',
-              child: Text(context.tr('Expense')),
-            ),
-            DropdownMenuItem(
-              value: 'income',
-              child: Text(context.tr('Income')),
-            ),
-            DropdownMenuItem(
-              value: 'transfer',
-              child: Text(context.tr('Transfer')),
-            ),
-          ],
-          onChanged: bankReadOnly
-              ? null
-              : (v) => setState(() {
-                  type = v!;
-                  category = null;
-                  selectedTags.clear();
-                  tagInput.clear();
-                  actionTag = null;
-                  selectedDebtId = null;
-                }),
-        ),
+
+        // ── Mô tả ──────────────────────────────────────────────────────────
         TextField(
           controller: description,
           readOnly: bankReadOnly,
           decoration: InputDecoration(
             labelText: context.tr('Description'),
-            hintText: context.tr('Coffee'),
+            hintText: 'Cà phê, ăn trưa, đổ xăng…',
+            prefixIcon: Icon(Icons.edit_note_outlined),
           ),
           textInputAction: TextInputAction.next,
         ),
+
+        // ── Danh mục (cho Thu chi thường) ──────────────────────────────────
         if (type != 'transfer')
           RecordPicker(
             key: ValueKey('category-$type'),
@@ -458,55 +652,85 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             }),
             optional: false,
           ),
+
+        // ── Phần Công nợ đặc thù ──────────────────────────────────────────
         if (isCongNo) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Hành động công nợ',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            children:
-                (type == 'expense'
-                        ? ['Cho vay', 'Trả nợ']
-                        : ['Thu nợ', 'Vay nợ'])
-                    .map(
-                      (tag) => ChoiceChip(
-                        label: Text(tag),
-                        selected: actionTag == tag,
-                        onSelected: (_) => setState(() {
-                          actionTag = tag;
-                          selectedDebtId = null;
-                        }),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colors.bgElevated,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colors.borderSubtle),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.handshake_outlined,
+                      size: 16,
+                      color: colors.primaryAccent,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Hành động công nợ',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
                       ),
-                    )
-                    .toList(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children:
+                      (type == 'expense'
+                              ? ['Cho vay', 'Trả nợ']
+                              : ['Thu nợ', 'Vay nợ'])
+                          .map(
+                            (tag) => ChoiceChip(
+                              label: Text(tag),
+                              selected: actionTag == tag,
+                              onSelected: (_) => setState(() {
+                                actionTag = tag;
+                                selectedDebtId = null;
+                              }),
+                            ),
+                          )
+                          .toList(),
+                ),
+                if (actionTag == 'Cho vay' || actionTag == 'Vay nợ') ...[
+                  const SizedBox(height: 12),
+                  PersonPicker(
+                    label: 'Người liên quan',
+                    value: borrower,
+                    records: people,
+                    onChanged: (v) => setState(() => borrower = v),
+                  ),
+                ],
+                if ((actionTag == 'Thu nợ' || actionTag == 'Trả nợ') &&
+                    activeDebts.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  RecordPicker(
+                    label: 'Chọn khoản công nợ cần trả/thu',
+                    value: selectedDebtId,
+                    records: activeDebts,
+                    onChanged: (v) => setState(() => selectedDebtId = v),
+                    optional: false,
+                  ),
+                ],
+              ],
+            ),
           ),
-          if (actionTag == 'Cho vay' || actionTag == 'Vay nợ') ...[
-            const SizedBox(height: 8),
-            PersonPicker(
-              label: context.tr('Người liên quan'),
-              value: borrower,
-              records: people,
-              onChanged: (v) => setState(() => borrower = v),
-            ),
-          ],
-          if ((actionTag == 'Thu nợ' || actionTag == 'Trả nợ') &&
-              activeDebts.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            RecordPicker(
-              label: 'Chọn danh sách công nợ',
-              value: selectedDebtId,
-              records: activeDebts,
-              onChanged: (v) => setState(() => selectedDebtId = v),
-              optional: false,
-            ),
-          ],
         ],
+
+        // ── Tag 'Mua chung' cho Công nợ chi tiêu ──────────────────────────
         if (isCongNo && type == 'expense')
           Wrap(
-            spacing: 4,
+            spacing: 6,
             children: tags
                 .where(
                   (t) =>
@@ -528,11 +752,11 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                 )
                 .toList(),
           ),
+
+        // ── Tài khoản thanh toán ───────────────────────────────────────────
         RecordPicker(
           key: ValueKey('account-$type'),
-          label: type == 'transfer'
-              ? context.tr('From account')
-              : context.tr('Account'),
+          label: type == 'transfer' ? 'Từ tài khoản' : 'Tài khoản',
           value: type == 'transfer' ? from : account,
           records: accounts,
           onChanged: (v) => setState(() {
@@ -551,56 +775,149 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             onChanged: (v) => setState(() => to = v),
           ),
         if (accounts.isEmpty)
-          Text(
-            context.tr(
-              'Add an account from More → Accounts before recording a transaction.',
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Chưa có tài khoản nào. Vui lòng thêm tài khoản từ Cài đặt → Tài khoản.',
+              style: TextStyle(color: colors.expense, fontSize: 12),
             ),
           ),
+
+        // ── Tags cho danh mục thường ───────────────────────────────────────
         if (!isCongNo && category != null) ...[
-          Text(context.tr('Tags')),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: tags
-                .where(
-                  (t) =>
-                      tagsForCategory([t], category).isNotEmpty ||
-                      selectedTags.contains(t.text('name').toLowerCase()),
-                )
-                .map(
-                  (t) => FilterChip(
-                    label: Text('#${TagDisplay.forRecord(t)}'),
-                    selected: selectedTags.contains(
-                      t.text('name').toLowerCase(),
-                    ),
-                    onSelected: (v) => setState(() {
-                      if (v) {
-                        selectedTags.add(t.text('name').toLowerCase());
-                      } else {
-                        selectedTags.remove(t.text('name').toLowerCase());
-                      }
-                    }),
-                  ),
-                )
-                .toList(),
-          ),
-          TextField(
-            controller: tagInput,
-            decoration: InputDecoration(
-              labelText: context.tr('Add tags (optional)'),
-              hintText: 'coffee, friends',
-            ),
-            textInputAction: TextInputAction.next,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Thẻ (Tags)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: tags
+                    .where(
+                      (t) =>
+                          tagsForCategory([t], category).isNotEmpty ||
+                          selectedTags.contains(t.text('name').toLowerCase()),
+                    )
+                    .map(
+                      (t) => FilterChip(
+                        label: Text('#${TagDisplay.forRecord(t)}'),
+                        selected: selectedTags.contains(
+                          t.text('name').toLowerCase(),
+                        ),
+                        onSelected: (v) => setState(() {
+                          if (v) {
+                            selectedTags.add(t.text('name').toLowerCase());
+                          } else {
+                            selectedTags.remove(t.text('name').toLowerCase());
+                          }
+                        }),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: tagInput,
+                decoration: InputDecoration(
+                  labelText: context.tr('Add tags (optional)'),
+                  hintText: 'caphe, banbe',
+                  prefixIcon: Icon(Icons.tag_rounded),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+            ],
           ),
         ],
+
+        // ── Ghi chú ────────────────────────────────────────────────────────
         TextField(
           controller: note,
           decoration: InputDecoration(
             labelText: context.tr('Notes (optional)'),
+            prefixIcon: Icon(Icons.notes_rounded),
           ),
+          minLines: 1,
+          maxLines: 3,
           textInputAction: TextInputAction.done,
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _TypeButton — Nút chọn loại giao dịch dạng Segmented
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TypeButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color activeColor;
+  final VoidCallback onTap;
+
+  const _TypeButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.activeColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected
+            ? (isDark
+                  ? activeColor.withValues(alpha: 0.25)
+                  : activeColor.withValues(alpha: 0.12))
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? activeColor : colors.textMuted,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected ? activeColor : colors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

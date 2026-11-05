@@ -5,7 +5,6 @@ import '../../app/components.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../core/database/record.dart';
-import '../../core/localization/app_language.dart';
 import '../../core/utils/money.dart';
 import '../../core/utils/tag_display.dart';
 import '../transactions/transaction_screen.dart';
@@ -85,15 +84,14 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
         diff = summary.difference;
 
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr('Đầu tư'))),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        children: [
-          Align(
-            alignment: Alignment.centerRight,
+      appBar: AppBar(
+        title: const Text('Đầu tư'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
             child: FilledButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('Thêm giao dịch đầu tư'),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Thêm giao dịch'),
               onPressed: () => showTransactionForm(
                 context,
                 initialCategory: categories
@@ -108,8 +106,12 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          // Filter Row: Time range segmented control
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+        children: [
+          // ── Filter Row: Time range segmented control ─────────────────────
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -154,7 +156,7 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
           ),
           const SizedBox(height: 8),
 
-          // Tag Filter Chips (Multi-select)
+          // ── Tag Filter Chips (Multi-select) ──────────────────────────────
           if (investmentTags.isNotEmpty) ...[
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -184,21 +186,36 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
             const SizedBox(height: 12),
           ],
 
-          // Summary Cards: Vốn bỏ vào, Tiền nhận về, Chênh lệch
+          // ── Summary Card: Vốn bỏ vào, Tiền nhận về, Chênh lệch ────────────
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'TỔNG QUAN ĐẦU TƯ',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                      color: colors.textSecondary,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: colors.primaryAccent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'TỔNG QUAN ĐẦU TƯ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -207,19 +224,35 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Vốn bỏ vào',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.north_rounded,
+                                  size: 14,
+                                  color: colors.expense,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    'Vốn bỏ vào',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colors.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 4),
                             Text(
                               Money.format(totalInvested, currency),
                               style: TextStyle(
                                 fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w800,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                                 color: colors.expense,
                               ),
                             ),
@@ -228,7 +261,7 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
                       ),
                       Container(
                         width: 1,
-                        height: 36,
+                        height: 40,
                         color: colors.borderSubtle,
                       ),
                       const SizedBox(width: 16),
@@ -236,19 +269,35 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Tiền nhận về (gốc+lãi)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.textSecondary,
-                              ),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.south_rounded,
+                                  size: 14,
+                                  color: colors.income,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    'Tiền nhận về (gốc+lãi)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colors.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 4),
                             Text(
                               Money.format(totalReturned, currency),
                               style: TextStyle(
                                 fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w800,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                                 color: colors.income,
                               ),
                             ),
@@ -260,13 +309,13 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
                   const Divider(height: 24),
                   Wrap(
                     alignment: WrapAlignment.spaceBetween,
-                    spacing: 16,
+                    spacing: 12,
                     runSpacing: 8,
                     children: [
                       Text(
-                        'Chênh lệch',
+                        'Chênh lệch (Lãi/Lỗ ròng)',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: colors.textPrimary,
                         ),
@@ -274,8 +323,9 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
                       Text(
                         '${diff >= 0 ? '+' : '−'}${Money.format(diff.abs(), currency)}',
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                           color: diff >= 0 ? colors.income : colors.expense,
                         ),
                       ),
@@ -287,7 +337,7 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Transaction History Header
+          // ── Transaction History Header ───────────────────────────────────
           SectionHeader(
             title:
                 'Lịch sử giao dịch đầu tư (${investmentTransactions.length})',
@@ -295,63 +345,58 @@ class _InvestmentScreenState extends ConsumerState<InvestmentScreen> {
 
           if (investmentTransactions.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
+              padding: const EdgeInsets.symmetric(vertical: 36),
               child: Center(
-                child: Text(
-                  'Chưa có giao dịch đầu tư nào trong khoảng thời gian này.',
-                  style: TextStyle(color: colors.textMuted),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.trending_up_rounded,
+                      size: 40,
+                      color: colors.textMuted,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Chưa có giao dịch đầu tư nào trong khoảng thời gian này.',
+                      style: TextStyle(color: colors.textMuted, fontSize: 13),
+                    ),
+                  ],
                 ),
               ),
-            ),
-
-          for (final t in investmentTransactions)
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color:
-                        (t.text('type') == 'income'
-                                ? colors.income
-                                : colors.expense)
-                            .withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+            )
+          else
+            for (final t in investmentTransactions)
+              Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
                   ),
-                  child: Icon(
-                    t.text('type') == 'income'
-                        ? Icons.arrow_downward_rounded
-                        : Icons.arrow_upward_rounded,
-                    color: t.text('type') == 'income'
-                        ? colors.income
-                        : colors.expense,
-                    size: 20,
+                  leading: TransactionLeadingIcon(type: t.text('type')),
+                  title: Text(
+                    t.text('description').isEmpty
+                        ? (t.text('type') == 'income'
+                              ? 'Thu đầu tư'
+                              : 'Chi đầu tư')
+                        : t.text('description'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: colors.textPrimary,
+                    ),
                   ),
-                ),
-                title: Text(
-                  t.text('description').isEmpty
-                      ? (t.text('type') == 'income'
-                            ? 'Thu đầu tư'
-                            : 'Chi đầu tư')
-                      : t.text('description'),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
+                  subtitle: Text(
+                    _formatDate(t.date('occurred_at')),
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
                   ),
+                  trailing: MoneyText(
+                    amountMinor: t.money('amount'),
+                    currency: t.text('currency'),
+                    direction: t.text('type'),
+                  ),
+                  onTap: () => showTransactionDetail(context, t),
                 ),
-                subtitle: Text(
-                  _formatDate(t.date('occurred_at')),
-                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
-                ),
-                trailing: MoneyText(
-                  amountMinor: t.money('amount'),
-                  currency: t.text('currency'),
-                  direction: t.text('type'),
-                ),
-                onTap: () => showTransactionDetail(context, t),
               ),
-            ),
           const SizedBox(height: 40),
         ],
       ),

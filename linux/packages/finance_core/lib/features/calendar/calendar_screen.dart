@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../app/theme.dart';
 import 'calendar_models.dart';
 import 'calendar_providers.dart';
 
@@ -12,13 +13,28 @@ import 'calendar_providers.dart';
 /// Day-only DateTime (no time component).
 DateTime _dayOnly(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 
-/// Returns the event-count shading color for a day cell.
+/// Returns the event-count shading color for a day cell per Data Contract:
+/// 0: transparent
+/// 1-2: 0.15 alpha
+/// 3-5: 0.40 alpha
+/// 6+: 0.70 alpha
 Color _shadingColor(BuildContext context, int count) {
   final primary = Theme.of(context).colorScheme.primary;
   if (count == 0) return Colors.transparent;
   if (count <= 2) return primary.withValues(alpha: 0.15);
   if (count <= 5) return primary.withValues(alpha: 0.40);
   return primary.withValues(alpha: 0.70);
+}
+
+// Preserve calendar colors while keeping small labels readable on dense cells.
+Color _readableForeground(Color background, Color preferred) {
+  final bg = background.computeLuminance();
+  final fg = preferred.computeLuminance();
+  final ratio = ((bg > fg ? bg : fg) + 0.05) / ((bg > fg ? fg : bg) + 0.05);
+  if (ratio >= 4.5) return preferred;
+  final whiteRatio = 1.05 / (bg + 0.05);
+  final blackRatio = (bg + 0.05) / 0.05;
+  return whiteRatio >= blackRatio ? Colors.white : Colors.black;
 }
 
 /// Vietnamese day-of-week header labels (Monday first).
@@ -99,7 +115,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Refresh calendar data when app regains focus.
       ref.read(calendarProvider.notifier).requestPermission();
     }
   }
@@ -150,6 +165,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final calState = ref.watch(calendarProvider);
     final month = ref.watch(selectedMonthCalendarProvider);
     final today = _dayOnly(DateTime.now());
+    final colors = context.colors;
 
     return Scaffold(
       appBar: AppBar(
@@ -157,26 +173,60 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         actions: [
           IconButton(
             tooltip: 'Cài đặt lịch',
-            icon: const Icon(Icons.tune_outlined),
+            icon: const Icon(Icons.tune_rounded),
             onPressed: () => context.push('/calendar/settings'),
           ),
         ],
       ),
       body: calState.permissionDenied && !calState.hasPermission
-          ? _buildPermissionDenied()
+          ? _buildPermissionDenied(colors)
           : !calState.hasPermission
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                if (calState.loading) const LinearProgressIndicator(),
+                if (calState.loading)
+                  LinearProgressIndicator(
+                    minHeight: 2,
+                    color: colors.primaryAccent,
+                  ),
                 if (calState.error != null)
-                  ListTile(
-                    title: Text(calState.error!),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.refresh),
-                      onPressed: () => ref
-                          .read(calendarProvider.notifier)
-                          .requestPermission(),
+                  Container(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.expense.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 16,
+                          color: colors.expense,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            calState.error!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colors.expense,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 18),
+                          onPressed: () => ref
+                              .read(calendarProvider.notifier)
+                              .requestPermission(),
+                        ),
+                      ],
                     ),
                   ),
                 _MonthHeader(
@@ -186,14 +236,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                   onToday: _goToday,
                 ),
                 _WeekdayRow(),
+                const SizedBox(height: 4),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       return Column(
                         children: [
                           SizedBox(
-                            // Give grid roughly 60% of available height.
-                            height: constraints.maxHeight * 0.72,
+                            height: constraints.maxHeight * 0.68,
                             child: _MonthGrid(
                               month: month,
                               today: today,
@@ -203,7 +253,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                                   setState(() => _selectedDay = day),
                             ),
                           ),
-                          const Divider(height: 1),
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: colors.borderSubtle,
+                          ),
                           Expanded(
                             child: _DayDetailPanel(
                               selectedDay: _selectedDay ?? today,
@@ -222,25 +276,38 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     );
   }
 
-  Widget _buildPermissionDenied() {
+  Widget _buildPermissionDenied(AppThemeColors colors) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.calendar_month_outlined, size: 64),
-            const SizedBox(height: 16),
-            const Text(
-              'Ứng dụng cần quyền đọc lịch để hiển thị sự kiện.',
-              textAlign: TextAlign.center,
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: colors.bgElevated,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.calendar_month_outlined,
+                size: 32,
+                color: colors.primaryAccent,
+              ),
             ),
             const SizedBox(height: 16),
+            const Text(
+              'Ứng dụng cần quyền đọc lịch để hiển thị sự kiện từ Google Calendar.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: () =>
                   ref.read(calendarProvider.notifier).requestPermission(),
-              icon: const Icon(Icons.lock_open_outlined),
-              label: const Text('Yêu cầu quyền đọc lịch'),
+              icon: const Icon(Icons.lock_open_outlined, size: 18),
+              label: const Text('Cấp quyền đọc lịch'),
             ),
           ],
         ),
@@ -268,28 +335,46 @@ class _MonthHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.chevron_left),
+            icon: Icon(Icons.chevron_left_rounded, color: colors.textSecondary),
             onPressed: onPrev,
             tooltip: 'Tháng trước',
           ),
           Expanded(
             child: Text(
               _monthTitle(month),
-              style: Theme.of(context).textTheme.titleMedium,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.chevron_right),
+            icon: Icon(
+              Icons.chevron_right_rounded,
+              color: colors.textSecondary,
+            ),
             onPressed: onNext,
             tooltip: 'Tháng sau',
           ),
-          TextButton(onPressed: onToday, child: const Text('Hôm nay')),
+          ActionChip(
+            label: const Text('Hôm nay'),
+            avatar: Icon(
+              Icons.today_rounded,
+              size: 14,
+              color: colors.primaryAccent,
+            ),
+            onPressed: onToday,
+            visualDensity: VisualDensity.compact,
+            side: BorderSide(color: colors.borderSubtle),
+          ),
         ],
       ),
     );
@@ -303,21 +388,27 @@ class _MonthHeader extends StatelessWidget {
 class _WeekdayRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: _viWeekHeaders
-          .map(
-            (h) => Expanded(
-              child: Center(
-                child: Text(
-                  h,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold),
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        children: _viWeekHeaders
+            .map(
+              (h) => Expanded(
+                child: Center(
+                  child: Text(
+                    h,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: h == 'CN' ? colors.expense : colors.textMuted,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          )
-          .toList(),
+            )
+            .toList(),
+      ),
     );
   }
 }
@@ -343,18 +434,15 @@ class _MonthGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // First day of month.
     final firstOfMonth = DateTime(month.year, month.month, 1);
-    // Monday=1, so offset: (weekday - 1) cells before day 1.
     final startOffset = (firstOfMonth.weekday - 1) % 7;
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    // Total cells: 6 rows × 7 columns
     const totalCells = 42;
 
     return LayoutBuilder(
       builder: (context, constraints) => GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 7,
           mainAxisExtent: constraints.maxHeight / 6,
@@ -363,7 +451,6 @@ class _MonthGrid extends StatelessWidget {
         itemBuilder: (context, index) {
           final dayIndex = index - startOffset + 1;
           if (dayIndex < 1 || dayIndex > daysInMonth) {
-            // Empty cell (outside current month).
             return const SizedBox.shrink();
           }
           final day = DateTime(month.year, month.month, dayIndex);
@@ -406,37 +493,45 @@ class _DayCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = events.length;
     final shading = _shadingColor(context, count);
+    final cellBackground = Color.alphaBlend(
+      shading,
+      Theme.of(context).scaffoldBackgroundColor,
+    );
     final primary = Theme.of(context).colorScheme.primary;
     final onPrimary = Theme.of(context).colorScheme.onPrimary;
     final colorScheme = Theme.of(context).colorScheme;
+    final colors = context.colors;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final line = MediaQuery.textScalerOf(context).scale(11) + 4;
-        final capacity = ((constraints.maxHeight - 30 - line) / line)
+        final capacity = ((constraints.maxHeight - 28 - line) / line)
             .floor()
             .clamp(0, 2);
         final visibleEvents = events.take(capacity).toList();
         final overflow = count - visibleEvents.length;
         return GestureDetector(
           onTap: onTap,
+          behavior: HitTestBehavior.opaque,
           child: Container(
-            margin: const EdgeInsets.all(1),
+            margin: const EdgeInsets.all(1.5),
             decoration: BoxDecoration(
               color: shading,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(8),
               border: isSelected
-                  ? Border.all(color: primary, width: 1.5)
-                  : null,
+                  ? Border.all(color: primary, width: 2)
+                  : Border.all(
+                      color: colors.borderSubtle.withValues(alpha: 0.5),
+                    ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Date number
+                // Date number with Today indicator
                 Container(
-                  width: 22,
-                  height: 22,
+                  width: 24,
+                  height: 24,
                   decoration: isToday
                       ? BoxDecoration(color: primary, shape: BoxShape.circle)
                       : null,
@@ -447,8 +542,15 @@ class _DayCell extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: isToday
                             ? FontWeight.bold
-                            : FontWeight.normal,
-                        color: isToday ? onPrimary : null,
+                            : (count > 0 ? FontWeight.w600 : FontWeight.normal),
+                        color: isToday
+                            ? onPrimary
+                            : _readableForeground(
+                                cellBackground,
+                                day.weekday == DateTime.sunday
+                                    ? colors.expense
+                                    : colors.textPrimary,
+                              ),
                       ),
                     ),
                   ),
@@ -460,8 +562,11 @@ class _DayCell extends StatelessWidget {
                     '+$overflow',
                     style: TextStyle(
                       fontSize: 9,
-                      color: colorScheme.secondary,
-                      fontWeight: FontWeight.w500,
+                      color: _readableForeground(
+                        cellBackground,
+                        colorScheme.secondary,
+                      ),
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
               ],
@@ -481,19 +586,23 @@ class _EventChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final chipColor = event.color != 0
         ? Color(event.color | 0xFF000000)
-        : Theme.of(context).colorScheme.secondary;
+        : Theme.of(context).colorScheme.primary;
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 1),
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+      margin: const EdgeInsets.symmetric(vertical: 0.5),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
       decoration: BoxDecoration(
-        color: chipColor.withValues(alpha: 0.85),
+        color: chipColor,
         borderRadius: BorderRadius.circular(3),
       ),
       child: Text(
         event.title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 9, color: Colors.white),
+        style: TextStyle(
+          fontSize: 9,
+          color: _readableForeground(chipColor, Colors.white),
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
@@ -512,38 +621,107 @@ class _DayDetailPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final df = DateFormat('EEEE, d/M', 'vi');
+    final colors = context.colors;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            df.format(selectedDay),
-            style: Theme.of(context).textTheme.titleSmall,
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                df.format(selectedDay),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                ),
+              ),
+              if (events.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.primaryAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${events.length} sự kiện',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: colors.primaryAccent,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         if (events.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Không có sự kiện',
-              style: TextStyle(color: Colors.grey),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.event_busy_outlined,
+                  size: 16,
+                  color: colors.textMuted,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Không có sự kiện nào trong ngày này.',
+                    style: TextStyle(color: colors.textMuted, fontSize: 13),
+                  ),
+                ),
+              ],
             ),
           )
         else
           Expanded(
             child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               itemCount: events.length,
               itemBuilder: (context, i) {
                 final event = events[i];
                 final dotColor = event.color != 0
                     ? Color(event.color | 0xFF000000)
-                    : Theme.of(context).colorScheme.secondary;
-                return ListTile(
-                  dense: true,
-                  leading: CircleAvatar(backgroundColor: dotColor, radius: 6),
-                  title: Text(event.title),
-                  subtitle: Text(_eventTimeLabel(event)),
+                    : colors.primaryAccent;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 2,
+                    ),
+                    dense: true,
+                    leading: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: dotColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    title: Text(
+                      event.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    subtitle: Text(
+                      _eventTimeLabel(event),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
                 );
               },
             ),

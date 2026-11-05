@@ -65,7 +65,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         await tester.enterText(
-          find.widgetWithText(TextField, 'Amount'),
+          find.byKey(const ValueKey('transaction-amount')),
           '10000',
         );
         if (sample.$2 == 'cong_no_expense') {

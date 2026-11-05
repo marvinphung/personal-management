@@ -188,13 +188,13 @@ void main() {
       inbox.capture = true;
       await tester.pumpWidget(wrap(const BankImportSettings()));
       await tester.pumpAndSettle();
-      expect(find.text('Enabled'), findsOneWidget);
-      expect(find.text('Disconnected'), findsOneWidget);
-      await tester.tap(find.text('Reconnect notification service'));
+      expect(find.text('Đã cấp quyền'), findsOneWidget);
+      expect(find.text('Mất kết nối'), findsOneWidget);
+      await tester.tap(find.text('Kết nối lại'));
       await tester.pumpAndSettle();
       expect(inbox.reconnects, 1);
-      expect(find.text('Connected'), findsOneWidget);
-      expect(find.text('Reconnect notification service'), findsNothing);
+      expect(find.text('Đang kết nối bình thường'), findsOneWidget);
+      expect(find.text('Kết nối lại'), findsNothing);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.android),
   );
@@ -235,7 +235,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<TextField>(find.widgetWithText(TextField, 'Amount'))
+            .widget<TextField>(find.byKey(const ValueKey('transaction-amount')))
             .controller!
             .text,
         '19.99',
@@ -278,7 +278,10 @@ void main() {
       expect(find.textContaining('19.99 USD'), findsOneWidget);
       await tester.tap(find.text('Bỏ qua'));
       await tester.pumpAndSettle();
-      expect(find.text('Không có giao dịch nào đang chờ.'), findsOneWidget);
+      expect(
+        find.textContaining('Không có giao dịch nào đang chờ'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       expect(await workspace.db.list(Entity.transactions), isEmpty);
     },

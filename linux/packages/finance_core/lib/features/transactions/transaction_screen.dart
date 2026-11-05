@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/utils/tag_display.dart';
 import 'package:intl/intl.dart';
+import '../../app/components.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 import '../../app/widgets.dart';
 import '../../core/database/record.dart';
 import '../../core/utils/money.dart';
@@ -13,30 +15,37 @@ import '../debts/debt_screen.dart';
 class MonthSelector extends ConsumerWidget {
   const MonthSelector({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      IconButton(
-        tooltip: context.tr('Previous month'),
-        onPressed: () => ref.read(monthProvider.notifier).move(-1),
-        icon: const Icon(Icons.chevron_left),
-      ),
-      Flexible(
-        child: Text(
-          DateFormat.yMMMM(
-            context.languageCode,
-          ).format(ref.watch(monthProvider)),
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.titleMedium,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: context.tr('Tháng trước'),
+          onPressed: () => ref.read(monthProvider.notifier).move(-1),
+          icon: Icon(Icons.chevron_left_rounded, color: colors.textSecondary),
         ),
-      ),
-      IconButton(
-        tooltip: context.tr('Next month'),
-        onPressed: () => ref.read(monthProvider.notifier).move(1),
-        icon: const Icon(Icons.chevron_right),
-      ),
-    ],
-  );
+        Flexible(
+          child: Text(
+            DateFormat.yMMMM(
+              context.languageCode,
+            ).format(ref.watch(monthProvider)),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: context.tr('Tháng sau'),
+          onPressed: () => ref.read(monthProvider.notifier).move(1),
+          icon: Icon(Icons.chevron_right_rounded, color: colors.textSecondary),
+        ),
+      ],
+    );
+  }
 }
 
 String transactionSign(Record r) => switch (r.text('type')) {
@@ -56,6 +65,7 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
   int visible = 50;
   bool ascending = false;
   int sortColumn = 0;
+
   @override
   Widget build(BuildContext context) {
     final categories =
@@ -63,6 +73,8 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
         tags = ref.watch(recordsProvider(Entity.tags)).value ?? [],
         accounts = ref.watch(recordsProvider(Entity.accounts)).value ?? [],
         links = ref.watch(recordsProvider(Entity.transactionTags)).value ?? [];
+    final colors = context.colors;
+
     String label(List<Record> rows, String id) =>
         rows.where((r) => r.id == id).firstOrNull?.text('name') ?? '';
     String tagNames(Record t) => links
@@ -72,18 +84,26 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
               '#${TagDisplay.forRecord(tags.where((t) => t.id == l.text('tag_id')).firstOrNull)}',
         )
         .join(' ');
-    Widget filter(
+
+    Widget filterChip(
       String title,
       String value,
       List<(String, String)> options,
       ValueChanged<String> change,
     ) => SizedBox(
-      width: 160,
+      width: 148,
       child: DropdownButtonFormField<String>(
         initialValue: value,
-        decoration: InputDecoration(labelText: title),
+        decoration: InputDecoration(
+          labelText: title,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+          isDense: true,
+        ),
         items: [
-          DropdownMenuItem(value: '', child: Text(context.tr('All'))),
+          DropdownMenuItem(value: '', child: Text(context.tr('Tất cả'))),
           for (final o in options)
             DropdownMenuItem(
               value: o.$1,
@@ -96,17 +116,26 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
         }),
       ),
     );
+
     return Column(
       children: [
-        const MonthSelector(),
+        // Month selector
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 4),
+          child: MonthSelector(),
+        ),
+
+        // Search bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: TextField(
             decoration: InputDecoration(
-              hintText: context.tr(
-                'Search description, notes, category or tags',
+              hintText: context.tr('Tìm mô tả, ghi chú, danh mục, thẻ…'),
+              prefixIcon: Icon(Icons.search, color: colors.textMuted),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
               ),
-              prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (v) => setState(() {
               query = v.toLowerCase();
@@ -114,35 +143,37 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
             }),
           ),
         ),
+
+        // Filters
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               spacing: 8,
               children: [
-                filter(
-                  context.tr('Type'),
+                filterChip(
+                  context.tr('Loại'),
                   type,
                   TransactionType.values
                       .map((v) => (v.name, context.tr(v.name)))
                       .toList(),
                   (v) => type = v,
                 ),
-                filter(
-                  context.tr('Account'),
+                filterChip(
+                  context.tr('Tài khoản'),
                   account,
                   accounts.map((r) => (r.id, r.text('name'))).toList(),
                   (v) => account = v,
                 ),
-                filter(
-                  context.tr('Category'),
+                filterChip(
+                  context.tr('Danh mục'),
                   category,
                   categories.map((r) => (r.id, r.text('name'))).toList(),
                   (v) => category = v,
                 ),
-                filter(
-                  context.tr('Tag'),
+                filterChip(
+                  context.tr('Thẻ'),
                   tag,
                   tags.map((r) => (r.id, TagDisplay.forRecord(r))).toList(),
                   (v) => tag = v,
@@ -151,7 +182,8 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+
+        // Transaction list
         Expanded(
           child: AsyncRecords(
             value: ref.watch(monthTransactionsProvider),
@@ -192,16 +224,21 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
                                 .compareTo(b.text('occurred_at'));
                       return ascending ? result : -result;
                     });
+
               if (filtered.isEmpty) {
                 return EmptyState(
-                  title: context.tr('No transactions this month'),
+                  title: context.tr('Không có giao dịch'),
                   description: context.tr(
                     'Record your first expense to start tracking your spending.',
                   ),
+                  icon: Icons.receipt_long_outlined,
                   onAdd: () => showTransactionForm(context),
                 );
               }
+
               final shown = filtered.take(visible).toList();
+
+              // Wide screen: DataTable
               if (MediaQuery.sizeOf(context).width >= 1000) {
                 return SingleChildScrollView(
                   child: Column(
@@ -214,12 +251,12 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
                           sortAscending: ascending,
                           columns: [
                             for (final (i, title) in [
-                              context.tr('Date'),
-                              context.tr('Description'),
-                              context.tr('Category'),
-                              context.tr('Tags'),
-                              context.tr('Account'),
-                              context.tr('Amount'),
+                              context.tr('Ngày'),
+                              context.tr('Mô tả'),
+                              context.tr('Danh mục'),
+                              context.tr('Thẻ'),
+                              context.tr('Tài khoản'),
+                              context.tr('Số tiền'),
                             ].indexed)
                               DataColumn(
                                 label: Text(title),
@@ -285,19 +322,25 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
                       if (filtered.length > visible)
                         TextButton(
                           onPressed: () => setState(() => visible += 50),
-                          child: Text(context.tr('Load more')),
+                          child: Text(context.tr('Tải thêm')),
                         ),
                     ],
                   ),
                 );
               }
+
+              // Mobile: grouped list by date
               return ListView.builder(
+                padding: EdgeInsets.zero,
                 itemCount: shown.length + (filtered.length > visible ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (index == shown.length) {
-                    return TextButton(
-                      onPressed: () => setState(() => visible += 50),
-                      child: Text(context.tr('Load more')),
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: TextButton(
+                        onPressed: () => setState(() => visible += 50),
+                        child: Text(context.tr('Tải thêm')),
+                      ),
                     );
                   }
                   final t = shown[index],
@@ -309,29 +352,15 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
                           : DateFormat.yMMMd(
                               context.languageCode,
                             ).format(shown[index - 1].date('occurred_at'));
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (date != previous)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                          child: Text(
-                            date,
-                            style: Theme.of(context).textTheme.labelLarge,
-                          ),
-                        ),
-                      ListTile(
-                        title: Text(
-                          t.text('description').isEmpty
-                              ? context.tr(t.text('type'))
-                              : t.text('description'),
-                        ),
-                        subtitle: Text(
-                          '${label(categories, t.text('category_id'))} ${tagNames(t)}',
-                        ),
-                        trailing: Text(
-                          '${transactionSign(t)} ${Money.format(t.money('amount'), t.text('currency'))}',
-                        ),
+                      if (date != previous) DateGroupHeader(date: date),
+                      _TransactionListTile(
+                        transaction: t,
+                        categoryName: label(categories, t.text('category_id')),
+                        tagNames: tagNames(t),
                         onTap: () => showTransactionDetail(context, t),
                       ),
                     ],
@@ -345,6 +374,86 @@ class _TransactionScreenState extends ConsumerState<TransactionScreen> {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _TransactionListTile — tile riêng cho mỗi giao dịch trong danh sách mobile
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TransactionListTile extends StatelessWidget {
+  final Record transaction;
+  final String categoryName;
+  final String tagNames;
+  final VoidCallback onTap;
+
+  const _TransactionListTile({
+    required this.transaction,
+    required this.categoryName,
+    required this.tagNames,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = transaction;
+    final colors = context.colors;
+    final type = t.text('type');
+    final description = t.text('description');
+    final subtitle = [
+      categoryName,
+      tagNames,
+    ].where((s) => s.isNotEmpty).join('  ');
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Row(
+          children: [
+            TransactionLeadingIcon(type: type),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    description.isEmpty ? context.tr(type) : description,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (subtitle.isNotEmpty)
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            MoneyText(
+              amountMinor: t.money('amount'),
+              currency: t.text('currency'),
+              direction: type,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// showTransactionDetail
+// ─────────────────────────────────────────────────────────────────────────────
 
 Future<void> showTransactionDetail(BuildContext context, Record transaction) =>
     showDialog<void>(
@@ -374,13 +483,26 @@ class TransactionDetail extends ConsumerWidget {
         categories = ref.watch(recordsProvider(Entity.categories)).value ?? [],
         tags = ref.watch(recordsProvider(Entity.tags)).value ?? [],
         links = ref.watch(recordsProvider(Entity.transactionTags)).value ?? [];
+    final colors = context.colors;
+
     String name(List<Record> records, String id) =>
         records.where((r) => r.id == id).firstOrNull?.text('name') ?? '—';
+
+    final type = record.text('type');
+    final tagList = links
+        .where((l) => l.text('transaction_id') == record.id)
+        .map(
+          (l) =>
+              '#${TagDisplay.forRecord(tags.where((t) => t.id == l.text('tag_id')).firstOrNull)}',
+        )
+        .join(' ');
+
     return AlertDialog(
       title: Text(
         record.text('description').isEmpty
-            ? context.tr('Transaction')
+            ? context.tr('Giao dịch')
             : record.text('description'),
+        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
       ),
       content: SizedBox(
         width: 500,
@@ -389,46 +511,44 @@ class TransactionDetail extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '${transactionSign(record)} ${Money.format(record.money('amount'), record.text('currency'))}',
-                style: Theme.of(context).textTheme.headlineMedium,
+              // Amount
+              MoneyText(
+                amountMinor: record.money('amount'),
+                currency: record.text('currency'),
+                direction: type,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                ),
               ),
               const SizedBox(height: 16),
-              for (final pair in {
-                if (record.data['installment_group'] != null)
-                  context.tr(
-                    'Installments',
-                  ): '${record.text('installment_number')}/${record.text('installment_count')}',
-                context.tr('Type'): context.tr(record.text('type')),
-                context.tr('Purpose'): context.tr(record.text('purpose')),
-                context.tr('Date'): DateFormat.yMMMd(
+              // Details
+              _DetailRow(label: context.tr('Loại'), value: context.tr(type)),
+              _DetailRow(
+                label: context.tr('Ngày'),
+                value: DateFormat.yMMMd(
                   context.languageCode,
                 ).add_Hm().format(record.date('occurred_at')),
-                context.tr('Account'): record.text('type') == 'transfer'
+              ),
+              _DetailRow(
+                label: context.tr('Tài khoản'),
+                value: type == 'transfer'
                     ? '${name(accounts, record.text('from_account_id'))} → ${name(accounts, record.text('to_account_id'))}'
                     : name(accounts, record.text('account_id')),
-                context.tr('Category'): name(
-                  categories,
-                  record.text('category_id'),
+              ),
+              if (type != 'transfer') ...[
+                _DetailRow(
+                  label: context.tr('Danh mục'),
+                  value: name(categories, record.text('category_id')),
                 ),
-                context.tr('Tags'): links
-                    .where((l) => l.text('transaction_id') == record.id)
-                    .map(
-                      (l) =>
-                          '#${TagDisplay.forRecord(tags.where((t) => t.id == l.text('tag_id')).firstOrNull)}',
-                    )
-                    .join(' '),
-                context.tr('Note'): record.text('note'),
-                context.tr('Created'): DateFormat.yMMMd(
-                  context.languageCode,
-                ).add_Hm().format(record.date('created_at')),
-                context.tr('Updated'): DateFormat.yMMMd(
-                  context.languageCode,
-                ).add_Hm().format(record.date('updated_at')),
-              }.entries)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Text('${pair.key}: ${pair.value}'),
+              ],
+              if (tagList.isNotEmpty)
+                _DetailRow(label: context.tr('Thẻ'), value: tagList),
+              if (record.text('note').isNotEmpty)
+                _DetailRow(
+                  label: context.tr('Ghi chú'),
+                  value: record.text('note'),
                 ),
             ],
           ),
@@ -451,7 +571,8 @@ class TransactionDetail extends ConsumerWidget {
                 }
               }
             },
-            child: Text(context.tr('Delete')),
+            style: TextButton.styleFrom(foregroundColor: colors.expense),
+            child: Text(context.tr('Xoá')),
           ),
           FilledButton(
             onPressed: () {
@@ -464,11 +585,59 @@ class TransactionDetail extends ConsumerWidget {
           FilledButton.icon(
             icon: const Icon(Icons.handshake_outlined),
             onPressed: () => showDebtDetail(context, linkedDebt),
-            label: Text(context.tr('Open linked debt')),
+            label: Text(context.tr('Xem công nợ liên kết')),
           )
         else
-          Text(context.tr('Manage through the linked debt.')),
+          Text(
+            context.tr('Quản lý qua khoản công nợ liên kết.'),
+            style: TextStyle(fontSize: 12, color: colors.textSecondary),
+          ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _DetailRow — hàng chi tiết trong dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 84,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: colors.textMuted,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: colors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

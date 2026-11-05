@@ -137,7 +137,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(
-          find.text('Choose your language\nChọn ngôn ngữ'),
+          find.text('Chọn ngôn ngữ\nChoose your language'),
           findsOneWidget,
         );
         expect(
@@ -235,7 +235,11 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('Lưu'), findsOneWidget);
-        expect(find.text('Hủy'), findsOneWidget);
+        if (width >= 600) {
+          expect(find.text('Hủy'), findsOneWidget);
+        } else {
+          expect(find.byIcon(Icons.close), findsOneWidget);
+        }
         expect(
           tester.takeException(),
           isNull,
@@ -274,13 +278,16 @@ void main() {
         UncontrolledProviderScope(container: c, child: const FinanceApp()),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Choose your language\nChọn ngôn ngữ'), findsNothing);
+      expect(find.text('Chọn ngôn ngữ\nChoose your language'), findsNothing);
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Lưu'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Nhập số tiền'), findsOneWidget);
-      await tester.enterText(find.widgetWithText(TextField, 'Số tiền'), '45k');
+      await tester.enterText(
+        find.byKey(const ValueKey('transaction-amount')),
+        '45k',
+      );
       await tester.enterText(
         find.widgetWithText(TextField, 'Mô tả'),
         'Coffee with Nam',

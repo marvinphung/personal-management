@@ -2,6 +2,7 @@ import '../../core/localization/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
+import '../../app/theme.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -14,6 +15,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final form = GlobalKey<FormState>();
   bool signup = false, busy = false;
   String? feedback;
+
   @override
   void dispose() {
     email.dispose();
@@ -37,7 +39,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         if (needsConfirmation && mounted) {
           setState(
             () => feedback = context.tr(
-              'Check your email to confirm your account, then sign in.',
+              'Kiểm tra email để xác nhận tài khoản, sau đó đăng nhập lại.',
             ),
           );
         }
@@ -48,7 +50,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       if (mounted) {
         setState(
           () => feedback = context.tr(
-            'Unable to sign in or create an account. Check your email, password, confirmation email and connection.',
+            'Không thể đăng nhập hoặc tạo tài khoản. Vui lòng kiểm tra lại email, mật khẩu hoặc kết nối mạng.',
           ),
         );
       }
@@ -58,88 +60,142 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Form(
-            key: form,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.account_balance_wallet_outlined, size: 48),
-                const SizedBox(height: 24),
-                Text(
-                  context.tr('Personal Finance'),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  context.tr('A clear view of your money.'),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                TextFormField(
-                  controller: email,
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: const [AutofillHints.email],
-                  decoration: InputDecoration(labelText: context.tr('Email')),
-                  validator: (v) => v != null && v.contains('@')
-                      ? null
-                      : context.tr('Enter a valid email'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: password,
-                  obscureText: true,
-                  autofillHints: [
-                    signup ? AutofillHints.newPassword : AutofillHints.password,
-                  ],
-                  decoration: InputDecoration(
-                    labelText: context.tr('Password'),
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Scaffold(
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Form(
+              key: form,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: colors.primaryAccent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Icon(
+                        Icons.savings_outlined,
+                        size: 38,
+                        color: colors.primaryAccent,
+                      ),
+                    ),
                   ),
-                  validator: (v) => (v?.length ?? 0) >= 8
-                      ? null
-                      : context.tr('Use at least 8 characters'),
-                  onFieldSubmitted: (_) => busy ? null : submit(),
-                ),
-                const SizedBox(height: 24),
-                if (feedback != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Text(feedback!, semanticsLabel: feedback),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Quản lý PMV',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: colors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                FilledButton(
-                  onPressed: busy ? null : submit,
-                  child: Text(
-                    busy
-                        ? context.tr('Please wait…')
-                        : signup
-                        ? context.tr('Create account')
-                        : context.tr('Sign in'),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Quản lý thu chi, công nợ, đầu tư và lịch cá nhân',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: colors.textSecondary),
                   ),
-                ),
-                TextButton(
-                  onPressed: busy
-                      ? null
-                      : () => setState(() {
-                          signup = !signup;
-                          feedback = null;
-                        }),
-                  child: Text(
-                    signup
-                        ? context.tr('Already have an account? Sign in')
-                        : context.tr('Create an account'),
+                  const SizedBox(height: 32),
+                  TextFormField(
+                    controller: email,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.email_outlined),
+                    ),
+                    validator: (v) => v != null && v.contains('@')
+                        ? null
+                        : 'Vui lòng nhập địa chỉ email hợp lệ',
                   ),
-                ),
-              ],
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: password,
+                    obscureText: true,
+                    autofillHints: [
+                      signup
+                          ? AutofillHints.newPassword
+                          : AutofillHints.password,
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Mật khẩu',
+                      prefixIcon: Icon(Icons.lock_outline_rounded),
+                    ),
+                    validator: (v) => (v?.length ?? 0) >= 8
+                        ? null
+                        : 'Mật khẩu cần tối thiểu 8 ký tự',
+                    onFieldSubmitted: (_) => busy ? null : submit(),
+                  ),
+                  const SizedBox(height: 20),
+                  if (feedback != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colors.expense.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 18,
+                            color: colors.expense,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              feedback!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colors.expense,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  FilledButton(
+                    onPressed: busy ? null : submit,
+                    child: Text(
+                      busy
+                          ? 'Vui lòng chờ…'
+                          : signup
+                          ? 'Tạo tài khoản'
+                          : 'Đăng nhập',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () => setState(() {
+                            signup = !signup;
+                            feedback = null;
+                          }),
+                    child: Text(
+                      signup
+                          ? 'Đã có tài khoản? Đăng nhập'
+                          : 'Chưa có tài khoản? Đăng ký',
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

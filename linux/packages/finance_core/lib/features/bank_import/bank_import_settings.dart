@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../app/components.dart';
 import '../../app/providers.dart';
 import '../../app/language.dart';
+import '../../app/theme.dart';
 import '../../app/widgets.dart';
 import '../../core/database/record.dart';
 import '../../core/localization/app_language.dart';
@@ -37,6 +39,7 @@ class _BankImportSettingsState extends ConsumerState<BankImportSettings> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final settings = ref.watch(bankSettingsProvider);
     final accounts =
         ref
@@ -45,184 +48,340 @@ class _BankImportSettingsState extends ConsumerState<BankImportSettings> {
             ?.where((a) => !a.flag('is_archived'))
             .toList() ??
         [];
-    return settings.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) => Center(
-        child: TextButton(
-          onPressed: () => ref.invalidate(bankSettingsProvider),
-          child: Text(context.tr('Retry')),
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Import thông báo ngân hàng')),
+      body: settings.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, _) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, size: 48, color: colors.textMuted),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () => ref.invalidate(bankSettingsProvider),
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(context.tr('Thử lại')),
+              ),
+            ],
+          ),
         ),
-      ),
-      data: (data) => ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            context.tr('Bank Notification Import'),
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            context.tr(
-              'Only configured bank apps are processed. Parsing is local, without AI. Failed transactions are ignored. Every draft requires your confirmation.',
-            ),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(context.tr('Automatic transaction detection')),
-            value: data['capture'] == true,
-            onChanged: busy ? null : (value) => configure({'capture': value}),
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(context.tr('Notification access')),
-            subtitle: Text(
-              context.tr(data['access'] == true ? 'Enabled' : 'Disabled'),
-            ),
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(context.tr('Notification service')),
-            subtitle: Text(
-              context.tr(
-                data['capture'] != true
-                    ? 'Automatic import is off'
-                    : data['connected'] == true
-                    ? 'Connected'
-                    : 'Disconnected',
+        data: (data) => ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          children: [
+            // ── Banner giới thiệu ───────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colors.primaryAccent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: colors.primaryAccent.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.security_rounded,
+                    size: 20,
+                    color: colors.primaryAccent,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Xử lý hoàn toàn cục bộ trên thiết bị Samsung A54, không gửi thông báo ra ngoài. Mọi giao dịch đều cần bạn xác nhận.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          if (data['capture'] == true &&
-              data['access'] == true &&
-              data['connected'] != true)
-            OutlinedButton.icon(
-              icon: const Icon(Icons.refresh),
-              label: Text(context.tr('Reconnect notification service')),
-              onPressed: busy
-                  ? null
-                  : () async {
-                      setState(() => busy = true);
+            const SizedBox(height: 16),
+
+            // ── Group 1: Trạng thái & Quyền truy cập ────────────────────────
+            SettingsGroup(
+              title: 'Trạng thái hoạt động',
+              children: [
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  title: const Text(
+                    'Tự động nhận diện biến động',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  subtitle: const Text(
+                    'Bắt thông báo từ các ứng dụng ngân hàng được chọn',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  value: data['capture'] == true,
+                  onChanged: busy
+                      ? null
+                      : (value) => configure({'capture': value}),
+                ),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 2,
+                  ),
+                  leading: Icon(
+                    data['access'] == true
+                        ? Icons.check_circle_rounded
+                        : Icons.warning_amber_rounded,
+                    color: data['access'] == true
+                        ? colors.income
+                        : colors.warning,
+                    size: 22,
+                  ),
+                  title: const Text('Quyền đọc thông báo'),
+                  subtitle: Text(
+                    data['access'] == true ? 'Đã cấp quyền' : 'Chưa cấp quyền',
+                    style: TextStyle(
+                      color: data['access'] == true
+                          ? colors.income
+                          : colors.warning,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                  trailing: OutlinedButton(
+                    onPressed: () async {
                       try {
-                        await ref.read(bankDraftRepositoryProvider).reconnect();
-                        ref.invalidate(bankSettingsProvider);
+                        await ref
+                            .read(bankDraftRepositoryProvider)
+                            .openSettings();
                       } catch (_) {
                         if (context.mounted) {
                           message(
                             context,
-                            context.tr(
-                              'Could not reconnect. Toggle Notification Access off and on.',
-                            ),
+                            context.tr('Không thể mở cài đặt quyền thông báo.'),
                           );
                         }
-                      } finally {
-                        if (mounted) setState(() => busy = false);
                       }
                     },
-            ),
-          Text(
-            context.tr(
-              'Developer mode is not required. If disconnected, reconnect or toggle Notification Access off and on.',
-            ),
-          ),
-          if ((data['lastBankAt'] as num? ?? 0) > 0)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(context.tr('Last bank notification')),
-              subtitle: Text(
-                '${context.dateLabel(DateTime.fromMillisecondsSinceEpoch((data['lastBankAt'] as num).toInt()), time: true)} · ${context.tr(switch (data['lastOutcome']) {
-                  'created' => 'Draft created',
-                  'duplicate' => 'Duplicate ignored',
-                  'failed' => 'Failed bank transaction ignored',
-                  'unsupported' => 'No supported transaction detected',
-                  _ => 'Notification processing error',
-                })}',
-              ),
-            ),
-          if (data['access'] != true)
-            Text(
-              context.tr(
-                'Enable notification access so the app can detect bank transactions automatically.',
-              ),
-            ),
-          OutlinedButton(
-            onPressed: () async {
-              try {
-                await ref.read(bankDraftRepositoryProvider).openSettings();
-              } catch (_) {
-                if (context.mounted) {
-                  message(
-                    context,
-                    context.tr('Could not open notification access settings.'),
-                  );
-                }
-              }
-            },
-            child: Text(context.tr('Open notification access settings')),
-          ),
-          const Divider(),
-          for (final source in (data['sources'] as List).cast<Map>()) ...[
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(source['name'] as String),
-              subtitle: Text(source['package'] as String),
-              value: source['enabled'] == true,
-              onChanged: busy
-                  ? null
-                  : (v) => configure({'bank': source['code'], 'enabled': v}),
-            ),
-            DropdownButtonFormField<String>(
-              key: ValueKey(
-                '${source['code']}-${source['account']}-${accounts.length}',
-              ),
-              initialValue: accounts.any((a) => a.id == source['account'])
-                  ? source['account'] as String?
-                  : '',
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: context.tr('Default finance account'),
-              ),
-              items: [
-                DropdownMenuItem<String>(
-                  value: '',
-                  child: Text(context.tr('Choose during review')),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(80, 36),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    child: const Text('Cài đặt'),
+                  ),
                 ),
-                for (final a in accounts)
-                  DropdownMenuItem(
-                    value: a.id,
-                    child: Text('${a.text('name')} (${a.text('currency')})'),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 2,
+                  ),
+                  leading: Icon(
+                    data['capture'] != true
+                        ? Icons.pause_circle_outline
+                        : data['connected'] == true
+                        ? Icons.sync_rounded
+                        : Icons.sync_problem_rounded,
+                    color: data['connected'] == true
+                        ? colors.income
+                        : colors.textMuted,
+                    size: 22,
+                  ),
+                  title: const Text('Dịch vụ nền (Listener Service)'),
+                  subtitle: Text(
+                    data['capture'] != true
+                        ? 'Đang tắt nhận diện'
+                        : data['connected'] == true
+                        ? 'Đang kết nối bình thường'
+                        : 'Mất kết nối',
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                  ),
+                  trailing:
+                      (data['capture'] == true &&
+                          data['access'] == true &&
+                          data['connected'] != true)
+                      ? FilledButton.icon(
+                          onPressed: busy
+                              ? null
+                              : () async {
+                                  setState(() => busy = true);
+                                  try {
+                                    await ref
+                                        .read(bankDraftRepositoryProvider)
+                                        .reconnect();
+                                    ref.invalidate(bankSettingsProvider);
+                                  } catch (_) {
+                                    if (context.mounted) {
+                                      message(
+                                        context,
+                                        context.tr(
+                                          'Không thể kết nối lại. Vui lòng bật lại quyền Thông báo.',
+                                        ),
+                                      );
+                                    }
+                                  } finally {
+                                    if (mounted) setState(() => busy = false);
+                                  }
+                                },
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Kết nối lại'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(100, 36),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                        )
+                      : null,
+                ),
+                if ((data['lastBankAt'] as num? ?? 0) > 0)
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 2,
+                    ),
+                    leading: const Icon(Icons.history_rounded, size: 22),
+                    title: const Text('Thông báo ngân hàng gần nhất'),
+                    subtitle: Text(
+                      '${context.dateLabel(DateTime.fromMillisecondsSinceEpoch((data['lastBankAt'] as num).toInt()), time: true)} · ${switch (data['lastOutcome']) {
+                        'created' => 'Đã tạo bản nháp',
+                        'duplicate' => 'Bỏ qua (trùng lặp)',
+                        'failed' => 'Giao dịch thất bại (đã bỏ qua)',
+                        'unsupported' => 'Không nhận diện được nội dung',
+                        _ => 'Lỗi xử lý',
+                      }}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
                   ),
               ],
-              onChanged: busy
-                  ? null
-                  : (v) => configure({
-                      'bank': source['code'],
-                      'account': v == '' ? null : v,
-                    }),
             ),
             const SizedBox(height: 16),
+
+            // ── Group 2: Danh sách ứng dụng ngân hàng ────────────────────────
+            SettingsGroup(
+              title: 'Ngân hàng hỗ trợ',
+              children: [
+                for (final source in (data['sources'] as List).cast<Map>())
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: colors.bgElevated,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.account_balance_rounded,
+                                size: 18,
+                                color: colors.primaryAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    source['name'] as String,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  Text(
+                                    source['package'] as String,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: colors.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: source['enabled'] == true,
+                              onChanged: busy
+                                  ? null
+                                  : (v) => configure({
+                                      'bank': source['code'],
+                                      'enabled': v,
+                                    }),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            '${source['code']}-${source['account']}-${accounts.length}',
+                          ),
+                          initialValue:
+                              accounts.any((a) => a.id == source['account'])
+                              ? source['account'] as String?
+                              : '',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Tài khoản ghi sổ mặc định',
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: '',
+                              child: Text('Chọn khi phân loại'),
+                            ),
+                            for (final a in accounts)
+                              DropdownMenuItem(
+                                value: a.id,
+                                child: Text(
+                                  '${a.text('name')} (${a.text('currency')})',
+                                ),
+                              ),
+                          ],
+                          onChanged: busy
+                              ? null
+                              : (v) => configure({
+                                  'bank': source['code'],
+                                  'account': v == '' ? null : v,
+                                }),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // ── Phím tắt mở Biến động ──────────────────────────────────────
+            FilledButton.icon(
+              onPressed: () => context.go('/transactions/pending'),
+              icon: const Icon(Icons.notifications_active_outlined),
+              label: const Text('Xem danh sách biến động đang chờ'),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Test parser (Debug mode only) ──────────────────────────────
+            if (kDebugMode)
+              Center(
+                child: TextButton.icon(
+                  onPressed: () => context.go('/settings/bank-import/parser'),
+                  icon: const Icon(Icons.bug_report_outlined, size: 16),
+                  label: const Text('Kiểm thử bộ phân tích (Parser Test)'),
+                ),
+              ),
           ],
-          FilledButton.icon(
-            onPressed: () => context.go('/transactions/pending'),
-            icon: const Icon(Icons.inbox_outlined),
-            label: Text(context.tr('Pending transactions')),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            context.tr(
-              'Add Finance Inbox from your Android home screen widget picker. Tapping it opens pending transactions.',
-            ),
-          ),
-          Text(
-            context.tr(
-              'Signing out clears this device’s bank drafts and import settings. Enable import again after signing in.',
-            ),
-          ),
-          if (kDebugMode)
-            TextButton(
-              onPressed: () => context.go('/settings/bank-import/parser'),
-              child: Text(context.tr('Test parser')),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -248,68 +407,85 @@ class _BankParserScreenState extends ConsumerState<BankParserScreen> {
   @override
   Widget build(BuildContext context) => !kDebugMode
       ? const SizedBox.shrink()
-      : ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text(
-              context.tr('Test parser'),
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            DropdownButton<String>(
-              value: bank,
-              items: [
-                for (final code in [
-                  'mbbank',
-                  'vietinbank',
-                  'bidv',
-                  'techcombank',
-                  'generic',
-                ])
-                  DropdownMenuItem(value: code, child: Text(code)),
-              ],
-              onChanged: (v) => setState(() => bank = v!),
-            ),
-            TextField(
-              controller: text,
-              minLines: 5,
-              maxLines: 12,
-              maxLength: 16384,
-              decoration: InputDecoration(
-                labelText: context.tr('Paste bank notification here'),
+      : Scaffold(
+          appBar: AppBar(title: const Text('Kiểm thử parser thông báo')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: bank,
+                decoration: const InputDecoration(labelText: 'Ngân hàng'),
+                items: [
+                  for (final code in [
+                    'mbbank',
+                    'vietinbank',
+                    'bidv',
+                    'techcombank',
+                    'generic',
+                  ])
+                    DropdownMenuItem(
+                      value: code,
+                      child: Text(code.toUpperCase()),
+                    ),
+                ],
+                onChanged: (v) => setState(() => bank = v!),
               ),
-            ),
-            FilledButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      setState(() => busy = true);
-                      try {
-                        final parsed = await ref
-                            .read(bankDraftRepositoryProvider)
-                            .parse(bank, text.text);
-                        if (mounted) setState(() => result = parsed);
-                      } catch (_) {
-                        if (context.mounted) {
-                          message(
-                            context,
-                            context.tr('Could not parse this notification.'),
-                          );
+              const SizedBox(height: 12),
+              TextField(
+                controller: text,
+                minLines: 4,
+                maxLines: 8,
+                maxLength: 16384,
+                decoration: const InputDecoration(
+                  labelText: 'Dán nội dung thông báo ngân hàng vào đây',
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        setState(() => busy = true);
+                        try {
+                          final parsed = await ref
+                              .read(bankDraftRepositoryProvider)
+                              .parse(bank, text.text);
+                          if (mounted) setState(() => result = parsed);
+                        } catch (_) {
+                          if (context.mounted) {
+                            message(
+                              context,
+                              context.tr('Không thể phân tích thông báo này.'),
+                            );
+                          }
+                        } finally {
+                          if (mounted) setState(() => busy = false);
                         }
-                      } finally {
-                        if (mounted) setState(() => busy = false);
-                      }
-                    },
-              child: Text(context.tr('Parse')),
-            ),
-            Text(
-              context.tr(
-                'Preview only. This does not create a draft or a transaction.',
+                      },
+                child: Text(busy ? 'Đang phân tích…' : 'Phân tích'),
               ),
-            ),
-            if (result != null)
-              SelectableText(
-                result!.entries.map((e) => '${e.key}: ${e.value}').join('\n'),
-              ),
-          ],
+              if (result != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: SelectableText(
+                    result!.entries
+                        .map((e) => '${e.key}: ${e.value}')
+                        .join('\n'),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         );
 }

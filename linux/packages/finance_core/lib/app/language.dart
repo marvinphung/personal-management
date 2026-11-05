@@ -113,86 +113,149 @@ class LanguageWelcomeScreen extends ConsumerStatefulWidget {
 }
 
 class _LanguageWelcomeScreenState extends ConsumerState<LanguageWelcomeScreen> {
-  String selected = 'en';
+  String selected = 'vi';
   bool busy = false;
   bool failed = false;
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: false,
-    child: Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(Icons.language, size: 48),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Choose your language\nChọn ngôn ngữ',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'You can change this later in Settings.\nBạn có thể đổi lại trong Cài đặt.',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  for (final entry in supportedLanguages.entries)
-                    ListTile(
-                      title: Text(entry.value),
-                      selected: selected == entry.key,
-                      leading: Icon(
-                        selected == entry.key
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: colors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          Icons.language_rounded,
+                          size: 32,
+                          color: colors.primary,
+                        ),
                       ),
-                      onTap: busy
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Chọn ngôn ngữ\nChoose your language',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Bạn có thể đổi lại trong Cài đặt.\nYou can change this later in Settings.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    for (final entry in supportedLanguages.entries)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Material(
+                          color: selected == entry.key
+                              ? colors.primary.withValues(alpha: 0.08)
+                              : colors.surfaceContainerHighest.withValues(
+                                  alpha: 0.4,
+                                ),
+                          borderRadius: BorderRadius.circular(14),
+                          child: InkWell(
+                            onTap: busy
+                                ? null
+                                : () => setState(() => selected = entry.key),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    selected == entry.key
+                                        ? Icons.radio_button_checked_rounded
+                                        : Icons.radio_button_off_rounded,
+                                    color: selected == entry.key
+                                        ? colors.primary
+                                        : colors.onSurfaceVariant,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    entry.value,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: selected == entry.key
+                                          ? FontWeight.w700
+                                          : FontWeight.normal,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 24),
+                    if (failed)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          'Không thể lưu. Vui lòng thử lại.\nCould not save. Please try again.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: colors.error, fontSize: 13),
+                        ),
+                      ),
+                    FilledButton(
+                      onPressed: busy
                           ? null
-                          : () => setState(() => selected = entry.key),
+                          : () async {
+                              setState(() {
+                                busy = true;
+                                failed = false;
+                              });
+                              try {
+                                await ref
+                                    .read(languageProvider.notifier)
+                                    .set(selected);
+                              } catch (_) {
+                                if (mounted) setState(() => failed = true);
+                              } finally {
+                                if (mounted) setState(() => busy = false);
+                              }
+                            },
+                      child: Text(
+                        busy
+                            ? '…'
+                            : selected == 'vi'
+                            ? 'Tiếp tục'
+                            : 'Continue',
+                      ),
                     ),
-                  const SizedBox(height: 24),
-                  if (failed)
-                    const Text(
-                      'Could not save. Please try again.\nKhông thể lưu. Vui lòng thử lại.',
-                    ),
-                  FilledButton(
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            setState(() {
-                              busy = true;
-                              failed = false;
-                            });
-                            try {
-                              await ref
-                                  .read(languageProvider.notifier)
-                                  .set(selected);
-                            } catch (_) {
-                              if (mounted) setState(() => failed = true);
-                            } finally {
-                              if (mounted) setState(() => busy = false);
-                            }
-                          },
-                    child: Text(
-                      busy
-                          ? '…'
-                          : selected == 'vi'
-                          ? 'Tiếp tục'
-                          : 'Continue',
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

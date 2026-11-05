@@ -142,19 +142,39 @@ class FinanceShell extends ConsumerWidget {
     return workspace.when(
       skipLoadingOnRefresh: false,
       skipLoadingOnReload: false,
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, _) => Scaffold(
+      loading: () => const Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(context.tr('Could not open your local finance data.')),
-              TextButton(
-                onPressed: () => ref.invalidate(workspaceProvider),
-                child: Text(context.tr('Retry')),
-              ),
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Đang khởi động…'),
             ],
+          ),
+        ),
+      ),
+      error: (_, _) => Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'Không thể mở dữ liệu tài chính.',
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => ref.invalidate(workspaceProvider),
+                  icon: Icon(Icons.refresh),
+                  label: Text('Thử lại'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -204,9 +224,9 @@ class FinanceShell extends ConsumerWidget {
                       title: Text(context.tr(tabTitle)),
                       actions: [
                         IconButton(
-                          tooltip: context.tr('Search (Ctrl+K)'),
+                          tooltip: context.tr('Tìm kiếm (Ctrl+K)'),
                           onPressed: () => showGlobalSearch(context),
-                          icon: const Icon(Icons.search),
+                          icon: const Icon(Icons.search_outlined),
                         ),
                         if (desktop)
                           Padding(
@@ -223,14 +243,29 @@ class FinanceShell extends ConsumerWidget {
                 children: [
                   if (desktop)
                     SizedBox(
-                      width: 225,
+                      width: 240,
                       child: Column(
                         children: [
                           Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Text(
-                              context.tr('Quản lý PMV'),
-                              style: Theme.of(context).textTheme.titleMedium,
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.savings_outlined,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    context.tr('Quản lý PMV'),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           Expanded(
@@ -242,6 +277,10 @@ class FinanceShell extends ConsumerWidget {
                                     leading: Icon(d.$3),
                                     title: Text(context.tr(d.$2)),
                                     onTap: () => context.go(d.$1),
+                                    selectedTileColor: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.1),
                                   ),
                               ],
                             ),
@@ -250,7 +289,11 @@ class FinanceShell extends ConsumerWidget {
                         ],
                       ),
                     ),
-                  if (desktop) const VerticalDivider(width: 1),
+                  if (desktop)
+                    VerticalDivider(
+                      width: 1,
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                   Expanded(child: child),
                 ],
               ),
@@ -260,49 +303,52 @@ class FinanceShell extends ConsumerWidget {
                   : FloatingActionButton(
                       onPressed: () => showTransactionForm(context),
                       tooltip: context.tr('Giao dịch mới'),
-                      child: const Icon(Icons.add),
+                      child: const Icon(Icons.add_rounded),
                     ),
               bottomNavigationBar: desktop
                   ? null
                   : NavigationBar(
                       selectedIndex: currentTabIndex < 0 ? 3 : currentTabIndex,
                       onDestinationSelected: (i) => context.go(pmvTabs[i].$1),
+                      // Chỉ icon — label ẩn; tooltip và semantics vẫn hoạt động
                       labelBehavior:
                           NavigationDestinationLabelBehavior.alwaysHide,
                       destinations: [
                         // Tab 0: Tổng quan
-                        const NavigationDestination(
-                          icon: Icon(Icons.home_outlined),
-                          selectedIcon: Icon(Icons.home),
-                          label: 'Tổng quan',
+                        NavigationDestination(
+                          icon: const Icon(Icons.home_outlined),
+                          selectedIcon: const Icon(Icons.home_rounded),
+                          label: context.tr('Tổng quan'),
+                          tooltip: context.tr('Tổng quan'),
                         ),
                         // Tab 1: Thu chi
-                        const NavigationDestination(
-                          icon: Icon(Icons.receipt_long_outlined),
-                          selectedIcon: Icon(Icons.receipt_long),
-                          label: 'Thu chi',
+                        NavigationDestination(
+                          icon: const Icon(Icons.receipt_long_outlined),
+                          selectedIcon: const Icon(Icons.receipt_long_rounded),
+                          label: context.tr('Thu chi'),
+                          tooltip: context.tr('Thu chi'),
                         ),
-                        // Tab 2: Biến động — badge with pending bank draft count.
+                        // Tab 2: Biến động — badge với số thông báo chờ
                         NavigationDestination(
                           icon: Badge(
                             isLabelVisible: bankCount > 0,
                             label: Text('$bankCount'),
-                            child: const Icon(
-                              Icons.notifications_active_outlined,
-                            ),
+                            child: const Icon(Icons.notifications_outlined),
                           ),
                           selectedIcon: Badge(
                             isLabelVisible: bankCount > 0,
                             label: Text('$bankCount'),
-                            child: const Icon(Icons.notifications_active),
+                            child: const Icon(Icons.notifications_rounded),
                           ),
-                          label: 'Biến động',
+                          label: context.tr('Biến động'),
+                          tooltip: context.tr('Biến động ngân hàng'),
                         ),
                         // Tab 3: Cài đặt
-                        const NavigationDestination(
-                          icon: Icon(Icons.settings_outlined),
-                          selectedIcon: Icon(Icons.settings),
-                          label: 'Cài đặt',
+                        NavigationDestination(
+                          icon: const Icon(Icons.settings_outlined),
+                          selectedIcon: const Icon(Icons.settings_rounded),
+                          label: context.tr('Cài đặt'),
+                          tooltip: context.tr('Cài đặt'),
                         ),
                       ],
                     ),
@@ -317,24 +363,43 @@ class FinanceShell extends ConsumerWidget {
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
   @override
-  Widget build(BuildContext context) => ListView(
-    children: [
-      for (final d in destinations.where(
-        (d) => [
-          '/accounts',
-          '/people',
-          '/categories',
-          '/tags',
-          '/settings',
-        ].contains(d.$1),
-      ))
-        ListTile(
-          leading: Icon(d.$3),
-          title: Text(context.tr(d.$2)),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.go(d.$1),
-        ),
-      const SyncStatus(),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final items = destinations.where(
+      (d) => [
+        '/accounts',
+        '/people',
+        '/categories',
+        '/tags',
+        '/settings',
+      ].contains(d.$1),
+    );
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      children: [
+        for (final d in items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(d.$3, size: 20),
+              ),
+              title: Text(context.tr(d.$2)),
+              trailing: const Icon(Icons.chevron_right, size: 18),
+              onTap: () => context.go(d.$1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        const SizedBox(height: 8),
+        const SyncStatus(),
+      ],
+    );
+  }
 }
