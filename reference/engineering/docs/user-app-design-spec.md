@@ -1,6 +1,6 @@
 # User App Design Specification & Token System
 
-**Ngày cập nhật:** 05/10/2026  
+**Ngày cập nhật:** 05/10/2026
 **Mục tiêu:** Giao diện dịu mắt, phân cấp thông tin rõ ràng, tối ưu hiển thị số tiền và hành động, tương thích đa nền tảng Android / iOS và Widget 2×2 / systemSmall.
 
 ---

@@ -5,7 +5,10 @@ from qlt.main import app
 
 def export_openapi(output_path: Path | None = None) -> None:
     if output_path is None:
-        output_path = Path(__file__).resolve().parents[3] / "docs/api/openapi.json"
+        output_path = (
+            Path(__file__).resolve().parents[3]
+            / "reference/engineering/generated/openapi.json"
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     openapi_schema = app.openapi()
