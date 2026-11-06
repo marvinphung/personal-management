@@ -9,45 +9,46 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/database/record.dart';
-import '../features/auth/auth_screen.dart';
 import '../features/calendar/calendar_screen.dart';
 import '../features/calendar/calendar_settings.dart';
 import '../features/catalog/catalog_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/debts/debt_screen.dart';
+import '../features/share_bill/share_bill_screen.dart';
 import '../features/investments/investment_screen.dart';
 import '../features/notes/notes_screen.dart';
 import '../features/transactions/transaction_form.dart';
 import '../features/transactions/transaction_screen.dart';
 import 'providers.dart';
 import 'language.dart';
+import '../features/auth/auth_screen.dart';
 import 'search.dart';
 import 'settings.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final signedIn = ref.watch(sessionProvider.select((s) => s != null));
+  final signedIn = ref.watch(
+    sessionProvider.select((session) => session != null),
+  );
   final needsLanguage = ref.watch(
     languageProvider.select((value) => value == null),
   );
   final router = GoRouter(
     initialLocation: '/',
-    redirect: (context, state) => !signedIn
-        ? state.uri.path == '/login'
-              ? null
-              : '/login'
-        : needsLanguage
-        ? state.uri.path == '/language'
-              ? null
-              : '/language'
-        : (state.uri.path == '/login' || state.uri.path == '/language')
-        ? '/'
-        : null,
+    redirect: (context, state) {
+      if (!signedIn) return state.uri.path == '/login' ? null : '/login';
+      if (needsLanguage) {
+        return state.uri.path == '/language' ? null : '/language';
+      }
+      return state.uri.path == '/language' || state.uri.path == '/login'
+          ? '/'
+          : null;
+    },
     routes: [
+      GoRoute(path: '/login', builder: (_, _) => const AuthScreen()),
       GoRoute(
         path: '/language',
         builder: (_, _) => const LanguageWelcomeScreen(),
       ),
-      GoRoute(path: '/login', builder: (_, _) => const AuthScreen()),
       ShellRoute(
         builder: (context, state, child) =>
             FinanceShell(location: state.uri.path, child: child),
@@ -73,6 +74,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
           ],
           GoRoute(path: '/debts', builder: (_, _) => const DebtScreen()),
+          GoRoute(
+            path: '/share-bills',
+            builder: (_, _) => const ShareBillScreen(),
+          ),
           GoRoute(
             path: '/investments',
             builder: (_, _) => const InvestmentScreen(),
@@ -124,6 +129,7 @@ const destinations = [
   ('/transactions', 'Thu chi', Icons.receipt_long_outlined),
   ('/transactions/pending', 'Biến động', Icons.notifications_active_outlined),
   ('/debts', 'Công nợ', Icons.handshake_outlined),
+  ('/share-bills', 'Share Bill', Icons.group_outlined),
   ('/investments', 'Đầu tư', Icons.trending_up),
   ('/calendar', 'Lịch', Icons.calendar_month_outlined),
   ('/notes', 'Ghi chú', Icons.notes_outlined),

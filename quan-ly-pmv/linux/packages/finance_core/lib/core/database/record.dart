@@ -9,6 +9,8 @@ enum Entity {
   transactionTags,
   debts,
   debtPayments,
+  shareBills,
+  shareBillPayments,
   notes,
 }
 
@@ -16,6 +18,8 @@ extension EntityTable on Entity {
   String get table => switch (this) {
     Entity.transactionTags => 'transaction_tags',
     Entity.debtPayments => 'debt_payments',
+    Entity.shareBills => 'share_bills',
+    Entity.shareBillPayments => 'share_bill_payments',
     _ => name,
   };
   static Entity parse(String table) =>
@@ -112,6 +116,13 @@ class Record {
       'manual_completed_at': null,
     },
     Entity.debtPayments => {'note': null, 'linked_transaction_id': null},
+    Entity.shareBills => {
+      'num_paid': 0,
+      'status': 'active',
+      'note': null,
+      'completed_at': null,
+    },
+    Entity.shareBillPayments => {'note': null},
     Entity.notes => {
       'content': '',
       'is_pinned': false,

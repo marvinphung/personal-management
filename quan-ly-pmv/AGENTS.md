@@ -67,6 +67,7 @@ Chi tiết tại [quy tắc nghiệp vụ](docs/srs/business-rules.md); các đi
 - Giữ nguyên thay đổi chưa commit của người dùng/agent khác. Không reset hoặc ghi đè cả file để tiện làm.
 - Tìm nguyên nhân trước khi sửa lỗi. Sửa theo phạm vi được giao; không thêm tính năng hoặc đổi DB/API chỉ để làm UI.
 - Flutter dùng chung: chạy test/analyze từ `linux/packages/finance_core/`. Android launcher: từ `android/`. Build release bằng `python3 linux/tool/build_apk.py` khi cần và được giao.
+- Khi chạy/cài APK, bắt buộc truyền cấu hình công khai Supabase qua `linux/tool/flutter_client.py` hoặc `linux/tool/build_apk.py` (đọc `.env` riêng tại root PMV). Không chạy `flutter run/build` trực tiếp rồi cài bản thiếu cấu hình; sau cài phải mở app kiểm tra không còn màn hình `Configuration required`. Không hardcode khóa vào mã nguồn.
 - Chạy kiểm tra phù hợp với phần thay đổi, giữ assertion nghiệp vụ; chỉ đổi selector khi UI thực sự đổi. Không bỏ test để làm kết quả xanh.
 - Chỉ sửa tài liệu: kiểm tra liên kết, cấu trúc và nội dung; không cần build/test app.
 - Nếu người dùng phân công “chỉ sửa UI, không test/build”, tuân thủ và bàn giao đúng `NOT RUN`; agent nghiệm thu sau mới chạy kiểm tra.

@@ -276,6 +276,11 @@ class FinanceRepository {
         throw const FormatException('This debt is cancelled');
       }
     }
+    if (row.entity == Entity.shareBills && !row.deleted) {
+      if (row.money('num_people') <= 0) {
+        throw const FormatException('Số người phải lớn hơn 0');
+      }
+    }
   }
 
   Future<void> remove(Record record) async {

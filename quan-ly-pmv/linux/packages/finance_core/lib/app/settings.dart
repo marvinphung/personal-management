@@ -8,7 +8,6 @@ import 'components.dart';
 import 'language.dart';
 import 'providers.dart';
 import 'theme.dart';
-import 'widgets.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SyncStatus
@@ -133,6 +132,13 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => context.go('/debts'),
             ),
             _SettingsTile(
+              icon: Icons.group_outlined,
+              iconColor: Colors.teal.shade600,
+              title: 'Share Bill',
+              subtitle: 'Theo dõi bill chia nhóm và nhận lại tiền',
+              onTap: () => context.go('/share-bills'),
+            ),
+            _SettingsTile(
               icon: Icons.trending_up_rounded,
               iconColor: Colors.green.shade700,
               title: 'Đầu tư',
@@ -248,53 +254,7 @@ class SettingsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
 
-        // ── Đăng xuất ─────────────────────────────────────────────────────
-        OutlinedButton.icon(
-          onPressed: () async {
-            final pending = ref.read(pendingProvider).value ?? [];
-            if (pending.isNotEmpty) {
-              final okay = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text(context.tr('Huỷ thay đổi chưa đồng bộ?')),
-                  content: Text(
-                    context.tr(
-                      '{count} local operations have not reached Supabase. Sign out clears this device\'s private data, including those changes.',
-                      {'count': pending.length},
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: Text(context.tr('Tiếp tục làm việc')),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: colors.expense,
-                      ),
-                      child: Text(context.tr('Huỷ và đăng xuất')),
-                    ),
-                  ],
-                ),
-              );
-              if (okay != true) return;
-            }
-            try {
-              await ref.read(workspaceProvider.notifier).signOut();
-            } catch (_) {
-              if (context.mounted) {
-                message(
-                  context,
-                  context.tr('Unable to finish signing out. Please try again.'),
-                );
-              }
-            }
-          },
-          icon: const Icon(Icons.logout_rounded),
-          label: Text(context.tr('Đăng xuất')),
-        ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 8),
 
         // ── Footer ────────────────────────────────────────────────────────
         Center(

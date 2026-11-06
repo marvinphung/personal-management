@@ -73,10 +73,14 @@ void main() {
       find.widgetWithText(TextField, 'Description'),
       'Coffee',
     );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Add tags (optional)'),
-      '#coffee',
-    );
+    await tester.ensureVisible(find.text('Thêm tag'));
+    await tester.tap(find.text('Thêm tag'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Thêm thẻ mới'), '#coffee');
+    await tester.tap(find.text('Thêm').last);
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     final saved = (await workspace.db.list(Entity.transactions)).single;
@@ -116,13 +120,6 @@ void main() {
       ]);
       await tester.pumpWidget(wrap(const TransactionForm()));
       await tester.pumpAndSettle();
-      final picker = find.byWidgetPredicate(
-        (w) =>
-            w is DropdownButtonFormField<String> &&
-            w.decoration.labelText == 'Category',
-      );
-      await tester.tap(picker);
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Ăn uống').last);
       await tester.pumpAndSettle();
       expect(find.widgetWithText(FilterChip, '#Cà phê'), findsOneWidget);
@@ -136,9 +133,7 @@ void main() {
             .selected,
         true,
       );
-      await tester.ensureVisible(picker);
-      await tester.tap(picker);
-      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Đi lại'));
       await tester.tap(find.text('Đi lại').last);
       await tester.pumpAndSettle();
       expect(find.widgetWithText(FilterChip, '#Cà phê'), findsNothing);

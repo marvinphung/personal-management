@@ -15,6 +15,7 @@ import '../bank_import/bank_draft.dart';
 import '../bank_import/bank_draft_repository.dart';
 import '../bank_import/bank_providers.dart';
 import '../debts/debt_service.dart';
+import '../share_bill/share_bill_service.dart';
 import 'tag_suggestions.dart';
 
 Future<void> showTransactionForm(
@@ -49,8 +50,7 @@ class TransactionForm extends ConsumerStatefulWidget {
 class _TransactionFormState extends ConsumerState<TransactionForm> {
   final amount = TextEditingController(),
       description = TextEditingController(),
-      note = TextEditingController(),
-      tagInput = TextEditingController();
+      note = TextEditingController();
   String type = 'expense';
   String? reviewCurrency;
   String? account, from, to, category, error, borrower;
@@ -59,6 +59,14 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
   DateTime occurred = DateTime.now();
   final selectedTags = <String>{};
   bool busy = false, initialized = false;
+
+  // UX improvements
+  String? _lastExpenseCategory, _lastIncomeCategory;
+  bool _showNote = false;
+  bool _shareBillEnabled = false;
+  int _shareBillPeople = 2;
+  String? _selectedShareBillId;
+
   bool get bankReadOnly =>
       widget.bankDraft != null || widget.record?.data['bank_source'] != null;
 
@@ -72,6 +80,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       amount.text = Money.groupedInput(r.money('amount'), r.text('currency'));
       description.text = r.text('description');
       note.text = r.text('note');
+      if (note.text.isNotEmpty) _showNote = true;
       type = r.text('type');
       if (widget.bankDraft != null) reviewCurrency = r.text('currency');
       account = r.data['account_id'];
@@ -87,7 +96,6 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
     amount.dispose();
     description.dispose();
     note.dispose();
-    tagInput.dispose();
     super.dispose();
   }
 
@@ -119,6 +127,11 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       if (isCongNo && actionTag == null) {
         throw const FormatException('Vui lòng chọn hành động công nợ.');
       }
+      if (_shareBillEnabled && type == 'expense' && !isCongNo && !bankReadOnly) {
+        if (_shareBillPeople < 1) {
+          throw const FormatException('Số người phải ít nhất là 1.');
+        }
+      }
 
       await saveAndSync(ref, (repository) async {
         final values = {
@@ -140,10 +153,6 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         final chosen = <Record>[];
         final names = {
           ...selectedTags,
-          ...tagInput.text
-              .split(RegExp(r'[,#]+'))
-              .map(normalizeTagName)
-              .where((s) => s.isNotEmpty),
         };
         if (isCongNo && actionTag != null) {
           names.add(normalizeTagName(actionTag!));
@@ -219,6 +228,23 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           await DebtService(
             repository,
           ).saveRepaymentTransaction(transaction, targetDebt!, chosen);
+        } else if (_shareBillEnabled &&
+            type == 'expense' &&
+            !isCongNo &&
+            widget.bankDraft == null) {
+          await ShareBillService(repository).saveExpenseWithShareBill(
+            transaction: transaction,
+            tags: chosen,
+            numPeople: _shareBillPeople,
+          );
+        } else if (_selectedShareBillId != null &&
+            type == 'income' &&
+            widget.bankDraft == null) {
+          await ShareBillService(repository).saveIncomeWithShareBillPayment(
+            transaction: transaction,
+            tags: chosen,
+            shareBillId: _selectedShareBillId!,
+          );
         } else {
           await repository.saveTransaction(transaction, chosen);
         }
@@ -246,9 +272,478 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
     }
   }
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  void _switchType(String newType) {
+    if (type == newType) return;
+    if (type == 'expense') _lastExpenseCategory = category;
+    if (type == 'income') _lastIncomeCategory = category;
+    setState(() {
+      type = newType;
+      category = newType == 'expense'
+          ? _lastExpenseCategory
+          : newType == 'income'
+          ? _lastIncomeCategory
+          : null;
+      selectedTags.clear();
+      actionTag = null;
+      selectedDebtId = null;
+      _shareBillEnabled = false;
+      _selectedShareBillId = null;
+    });
+  }
+
+  bool _isNhanShareBillCategory(Record? cat) {
+    if (cat == null) return false;
+    final name = cat.text('name').toLowerCase();
+    return name.contains('nhận share') ||
+        name.contains('nhan share') ||
+        name.contains('share bill') ||
+        cat.text('behavior') == 'share_bill_income';
+  }
+
+  List<Record> _topCategories(
+    List<Record> categories,
+    List<Record> transactions, {
+    int limit = 5,
+  }) {
+    final counts = <String, int>{};
+    for (final tx in transactions.where((t) => !t.deleted && t.text('type') == type)) {
+      final cid = tx.text('category_id');
+      if (cid.isNotEmpty) counts[cid] = (counts[cid] ?? 0) + 1;
+    }
+    final sorted = List<Record>.from(categories);
+    sorted.sort((a, b) {
+      final diff = (counts[b.id] ?? 0).compareTo(counts[a.id] ?? 0);
+      return diff != 0 ? diff : a.text('name').compareTo(b.text('name'));
+    });
+    final top = sorted.take(limit).toList();
+    // Ensure current selection is visible
+    if (category != null && !top.any((c) => c.id == category)) {
+      final cur = categories.where((c) => c.id == category).firstOrNull;
+      if (cur != null) top.insert(0, cur);
+    }
+    return top.take(limit + 1).toList();
+  }
+
+  // ── Feature Bubble ─────────────────────────────────────────────────────────
+
+  Widget _buildBubbleButton(
+    BuildContext context,
+    List<Record> allCategories,
+    bool isCongNo,
+  ) {
+    final congNoExpenseCat = type == 'expense'
+        ? allCategories.where((c) => !c.flag('is_archived') &&
+              (c.text('behavior') == 'cong_no_expense' || c.text('behavior') == 'lending'))
+            .firstOrNull
+        : null;
+    final congNoIncomeCat = type == 'income'
+        ? allCategories.where((c) => !c.flag('is_archived') &&
+              c.text('behavior') == 'cong_no_income')
+            .firstOrNull
+        : null;
+    final investExpenseCat = type == 'expense'
+        ? allCategories.where((c) => !c.flag('is_archived') &&
+              c.text('behavior') == 'investment_expense')
+            .firstOrNull
+        : null;
+    final investIncomeCat = type == 'income'
+        ? allCategories.where((c) => !c.flag('is_archived') &&
+              c.text('behavior') == 'investment_income')
+            .firstOrNull
+        : null;
+
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.add_circle_outline_rounded),
+      tooltip: 'Tính năng đặc biệt',
+      onSelected: (value) {
+        switch (value) {
+          case 'share_bill':
+            setState(() {
+              _shareBillEnabled = !_shareBillEnabled;
+              if (_shareBillEnabled) { actionTag = null; selectedDebtId = null; }
+            });
+          case 'cong_no':
+            final target = congNoExpenseCat ?? congNoIncomeCat;
+            if (target != null) setState(() {
+              category = target.id;
+              _shareBillEnabled = false;
+              _selectedShareBillId = null;
+              selectedTags.clear();
+              actionTag = null;
+              selectedDebtId = null;
+            });
+          case 'dau_tu':
+            final target = investExpenseCat ?? investIncomeCat;
+            if (target != null) setState(() {
+              category = target.id;
+              _shareBillEnabled = false;
+              _selectedShareBillId = null;
+              selectedTags.clear();
+              actionTag = null;
+              selectedDebtId = null;
+            });
+        }
+      },
+      itemBuilder: (ctx) => [
+        if (type == 'expense' && !bankReadOnly)
+          PopupMenuItem(
+            value: 'share_bill',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(_shareBillEnabled && !isCongNo
+                  ? Icons.group_rounded : Icons.group_outlined),
+              title: const Text('Chia bill với nhóm'),
+              trailing: (_shareBillEnabled && !isCongNo)
+                  ? const Icon(Icons.check, size: 16) : null,
+            ),
+          ),
+        if (congNoExpenseCat != null || congNoIncomeCat != null)
+          PopupMenuItem(
+            value: 'cong_no',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(isCongNo
+                  ? Icons.handshake_rounded : Icons.handshake_outlined),
+              title: const Text('Công nợ'),
+              trailing: isCongNo ? const Icon(Icons.check, size: 16) : null,
+            ),
+          ),
+        if (investExpenseCat != null || investIncomeCat != null)
+          const PopupMenuItem(
+            value: 'dau_tu',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.trending_up_rounded),
+              title: Text('Đầu tư'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ── Category section ───────────────────────────────────────────────────────
+
+  void _showAllCategories(
+    BuildContext context,
+    List<Record> categories,
+    List<Record> allCategories,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.3,
+        builder: (_, scrollController) {
+          final colors = context.colors;
+          return Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colors.borderProminent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Chọn danh mục',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                  children: [
+                    for (final c in categories)
+                      ListTile(
+                        selected: c.id == category,
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Text(
+                              c.text('name').isNotEmpty
+                                  ? c.text('name')[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        title: Text(c.text('name')),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        onTap: () {
+                          setState(() {
+                            category = c.id;
+                            selectedTags.clear();
+                            actionTag = null;
+                            selectedDebtId = null;
+                          });
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                    const Divider(),
+                    ListTile(
+                      leading: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: colors.primaryAccent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.add, color: colors.primaryAccent, size: 18),
+                      ),
+                      title: Text(
+                        'Thêm danh mục mới',
+                        style: TextStyle(color: colors.primaryAccent, fontWeight: FontWeight.w600),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _addNewCategory(context, allCategories);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _addNewCategory(BuildContext context, List<Record> allCategories) {
+    final controller = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(type == 'expense' ? 'Danh mục chi tiêu mới' : 'Danh mục thu nhập mới'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Tên danh mục',
+            hintText: 'Nhập tên danh mục…',
+          ),
+          textCapitalization: TextCapitalization.words,
+          onSubmitted: (_) => _saveNewCategory(ctx, controller.text, allCategories),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => _saveNewCategory(ctx, controller.text, allCategories),
+            child: const Text('Thêm'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _saveNewCategory(
+    BuildContext ctx,
+    String name,
+    List<Record> allCategories,
+  ) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    Navigator.pop(ctx);
+    try {
+      await saveAndSync(ref, (repository) async {
+        final cat = repository.create(Entity.categories, {
+          'name': trimmed,
+          'type': type,
+          'behavior': 'normal',
+          'is_default': false,
+          'is_archived': false,
+        });
+        await repository.save(cat);
+        setState(() {
+          category = cat.id;
+          selectedTags.clear();
+          actionTag = null;
+          selectedDebtId = null;
+        });
+      });
+    } catch (e) {
+      if (mounted) setState(() => error = userError(context, e));
+    }
+  }
+
+  // ── Tag section ────────────────────────────────────────────────────────────
+
+  void _showAllTags(
+    BuildContext context,
+    List<Record> allTagsForCategory,
+    List<Record> hiddenTags,
+  ) {
+    final newTagController = TextEditingController();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final colors = context.colors;
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.6,
+              maxChildSize: 0.9,
+              minChildSize: 0.3,
+              builder: (_, scrollController) => Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.borderProminent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                    child: Text(
+                      'Thẻ (Tags)',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: allTagsForCategory
+                          .map(
+                            (t) => FilterChip(
+                              label: Text('#${TagDisplay.forRecord(t)}'),
+                              selected: selectedTags.contains(
+                                t.text('name').toLowerCase(),
+                              ),
+                              onSelected: (v) {
+                                setModalState(() {});
+                                setState(() {
+                                  if (v) {
+                                    selectedTags.add(t.text('name').toLowerCase());
+                                  } else {
+                                    selectedTags.remove(t.text('name').toLowerCase());
+                                  }
+                                });
+                              },
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: newTagController,
+                            decoration: InputDecoration(
+                              labelText: 'Thêm thẻ mới',
+                              hintText: 'caphe, banbe…',
+                              prefixIcon: const Icon(Icons.tag_rounded),
+                            ),
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (v) => _addTagsFromInput(
+                              v,
+                              allTagsForCategory,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: () {
+                            _addTagsFromInput(
+                              newTagController.text,
+                              allTagsForCategory,
+                            );
+                            newTagController.clear();
+                            setModalState(() {});
+                          },
+                          child: const Text('Thêm'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _addTagsFromInput(String input, List<Record> existingTags) {
+    final names = input
+        .split(RegExp(r'[,#]+'))
+        .map(normalizeTagName)
+        .where((s) => s.isNotEmpty);
+    for (final name in names) {
+      final existing = existingTags
+          .where((t) => t.text('name').toLowerCase() == name)
+          .firstOrNull;
+      if (existing != null) {
+        setState(() => selectedTags.add(existing.text('name').toLowerCase()));
+      } else if (name.isNotEmpty) {
+        setState(() => selectedTags.add(name));
+      }
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final cs = Theme.of(context).colorScheme;
     final accountState = ref.watch(recordsProvider(Entity.accounts));
     final categoryState = ref.watch(recordsProvider(Entity.categories));
     final allCategories = categoryState.value ?? [];
@@ -274,7 +769,14 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
     final allDebts = debtsState.value ?? <Record>[];
     final tagState = ref.watch(recordsProvider(Entity.tags));
     final links = ref.watch(recordsProvider(Entity.transactionTags));
+    final txState = ref.watch(recordsProvider(Entity.transactions));
+    final allTxs = txState.value ?? [];
     final tags = tagSuggestions(tagState.value ?? [], links.value ?? []);
+    final shareBillState = ref.watch(recordsProvider(Entity.shareBills));
+    final activeShareBills = (shareBillState.value ?? [])
+        .where((b) => !b.deleted && b.text('status') == 'active')
+        .toList();
+
     final ready =
         accountState.hasValue &&
         categoryState.hasValue &&
@@ -327,6 +829,8 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         catBehavior == 'lending' ||
         selectedCat?.text('name') == 'Công nợ';
 
+    final isNhanShareBill = _isNhanShareBillCategory(selectedCat);
+
     final activeDebts = allDebts
         .where(
           (d) =>
@@ -348,6 +852,12 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             ?.text('currency') ??
         'VND';
 
+    // Top categories and tags
+    final topCats = _topCategories(categories, allTxs);
+    final allTagsForCat = tagsForCategory(tags, category);
+    final topTags = allTagsForCat.take(7).toList();
+    final hasMoreTags = allTagsForCat.length > 7;
+
     return FormDialog(
       title: widget.bankDraft != null
           ? 'Xác nhận giao dịch ngân hàng'
@@ -356,22 +866,36 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           : 'Chỉnh sửa giao dịch',
       busy: busy,
       saveEnabled: ready,
-      error:
-          error ??
-          (accountState.hasError ||
-                  categoryState.hasError ||
-                  tagState.hasError ||
-                  links.hasError
-              ? context.tr("Could not load choices. Close this form and retry.")
-              : null),
-      save: () => save(
-        accounts,
-        tags,
-        isCongNo: isCongNo,
-        people: people,
-        debts: allDebts,
-      ),
+      save: () => save(accounts, tags,
+          isCongNo: isCongNo, people: people, debts: allDebts),
+      appBarActions: [
+        if (type != 'transfer')
+          _buildBubbleButton(context, allCategories, isCongNo),
+      ],
       children: [
+        // ── Error display ở trên cùng ─────────────────────────────────────
+        if (error != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: cs.errorContainer,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    error!,
+                    style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // ── Bank info ────────────────────────────────────────────────────
         if (widget.bankDraft != null) ...[
           Container(
             padding: const EdgeInsets.all(12),
@@ -388,17 +912,16 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Kiểm tra kỹ thông tin trước khi xác nhận. Không có quy đổi tỷ giá.',
+                    'Kiểm tra kỹ thông tin trước khi xác nhận.',
                     style: TextStyle(fontSize: 12, color: colors.textSecondary),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 4),
         ],
 
-        // ── Loại giao dịch (Segmented buttons) ─────────────────────────────
+        // ── Loại giao dịch ───────────────────────────────────────────────
         if (!bankReadOnly)
           Container(
             decoration: BoxDecoration(
@@ -414,14 +937,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                     icon: Icons.north_rounded,
                     selected: type == 'expense',
                     activeColor: colors.expense,
-                    onTap: () => setState(() {
-                      type = 'expense';
-                      category = null;
-                      selectedTags.clear();
-                      tagInput.clear();
-                      actionTag = null;
-                      selectedDebtId = null;
-                    }),
+                    onTap: () => _switchType('expense'),
                   ),
                 ),
                 Expanded(
@@ -430,14 +946,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                     icon: Icons.south_rounded,
                     selected: type == 'income',
                     activeColor: colors.income,
-                    onTap: () => setState(() {
-                      type = 'income';
-                      category = null;
-                      selectedTags.clear();
-                      tagInput.clear();
-                      actionTag = null;
-                      selectedDebtId = null;
-                    }),
+                    onTap: () => _switchType('income'),
                   ),
                 ),
                 Expanded(
@@ -446,21 +955,14 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                     icon: Icons.swap_horiz_rounded,
                     selected: type == 'transfer',
                     activeColor: colors.primaryAccent,
-                    onTap: () => setState(() {
-                      type = 'transfer';
-                      category = null;
-                      selectedTags.clear();
-                      tagInput.clear();
-                      actionTag = null;
-                      selectedDebtId = null;
-                    }),
+                    onTap: () => _switchType('transfer'),
                   ),
                 ),
               ],
             ),
           ),
 
-        // ── Ô nhập số tiền lớn ─────────────────────────────────────────────
+        // ── Số tiền ──────────────────────────────────────────────────────
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
@@ -526,7 +1028,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                               ? colors.expense
                               : colors.textPrimary,
                         ),
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           hintText: '0',
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
@@ -564,7 +1066,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           ),
         ),
 
-        // ── Ngày giao dịch ─────────────────────────────────────────────────
+        // ── Ngày giao dịch ───────────────────────────────────────────────
         InkWell(
           onTap: bankReadOnly
               ? null
@@ -632,36 +1134,63 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           ),
         ),
 
-        // ── Mô tả ──────────────────────────────────────────────────────────
+        // ── Mô tả ────────────────────────────────────────────────────────
         TextField(
           controller: description,
           readOnly: bankReadOnly,
           decoration: InputDecoration(
             labelText: context.tr('Description'),
             hintText: 'Cà phê, ăn trưa, đổ xăng…',
-            prefixIcon: Icon(Icons.edit_note_outlined),
+            prefixIcon: const Icon(Icons.edit_note_outlined),
           ),
           textInputAction: TextInputAction.next,
         ),
 
-        // ── Danh mục (cho Thu chi thường) ──────────────────────────────────
-        if (type != 'transfer')
-          RecordPicker(
-            key: ValueKey('category-$type'),
-            label: context.tr('Category'),
-            value: category,
-            records: categories,
-            onChanged: (v) => setState(() {
-              category = v;
-              selectedTags.clear();
-              tagInput.clear();
-              actionTag = null;
-              selectedDebtId = null;
-            }),
-            optional: false,
+        // ── Danh mục quick-pick ───────────────────────────────────────────
+        if (type != 'transfer') ...[
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Danh mục',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final c in topCats)
+                    _CategoryChip(
+                      record: c,
+                      selected: c.id == category,
+                      onTap: () => setState(() {
+                        category = c.id;
+                        selectedTags.clear();
+                        actionTag = null;
+                        selectedDebtId = null;
+                      }),
+                    ),
+                  ActionChip(
+                    label: const Text('Khác'),
+                    avatar: const Icon(Icons.expand_more, size: 16),
+                    onPressed: () => _showAllCategories(
+                      context,
+                      categories,
+                      allCategories,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
+        ],
 
-        // ── Phần Công nợ đặc thù ──────────────────────────────────────────
+        // ── Công nợ ──────────────────────────────────────────────────────
         if (isCongNo) ...[
           Container(
             padding: const EdgeInsets.all(14),
@@ -735,7 +1264,24 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           ),
         ],
 
-        // ── Tag 'Mua chung' cho Công nợ chi tiêu ──────────────────────────
+        // ── Share bill toggle (expense, non-debt, non-bank) ───────────────
+        if (type == 'expense' && !isCongNo && !bankReadOnly)
+          _ShareBillToggle(
+            enabled: _shareBillEnabled,
+            numPeople: _shareBillPeople,
+            onToggle: (v) => setState(() => _shareBillEnabled = v),
+            onNumPeopleChanged: (v) => setState(() => _shareBillPeople = v),
+          ),
+
+        // ── Share bill picker (income, Nhận share bill) ───────────────────
+        if (type == 'income' && isNhanShareBill && activeShareBills.isNotEmpty)
+          _ShareBillPicker(
+            bills: activeShareBills,
+            selectedId: _selectedShareBillId,
+            onChanged: (v) => setState(() => _selectedShareBillId = v),
+          ),
+
+        // ── Mua chung tag cho Công nợ ─────────────────────────────────────
         if (isCongNo && type == 'expense')
           Wrap(
             spacing: 6,
@@ -761,7 +1307,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                 .toList(),
           ),
 
-        // ── Tài khoản thanh toán ───────────────────────────────────────────
+        // ── Tài khoản ─────────────────────────────────────────────────────
         RecordPicker(
           key: ValueKey('account-$type'),
           label: type == 'transfer' ? 'Từ tài khoản' : 'Tài khoản',
@@ -791,7 +1337,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             ),
           ),
 
-        // ── Tags cho danh mục thường ───────────────────────────────────────
+        // ── Tags quick-pick ───────────────────────────────────────────────
         if (!isCongNo && category != null) ...[
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -808,61 +1354,308 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: tags
-                    .where(
-                      (t) =>
-                          tagsForCategory([t], category).isNotEmpty ||
-                          selectedTags.contains(t.text('name').toLowerCase()),
-                    )
-                    .map(
-                      (t) => FilterChip(
-                        label: Text('#${TagDisplay.forRecord(t)}'),
-                        selected: selectedTags.contains(
-                          t.text('name').toLowerCase(),
-                        ),
-                        onSelected: (v) => setState(() {
-                          if (v) {
-                            selectedTags.add(t.text('name').toLowerCase());
-                          } else {
-                            selectedTags.remove(t.text('name').toLowerCase());
-                          }
-                        }),
+                children: [
+                  for (final t in topTags)
+                    FilterChip(
+                      label: Text('#${TagDisplay.forRecord(t)}'),
+                      selected: selectedTags.contains(
+                        t.text('name').toLowerCase(),
                       ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: tagInput,
-                decoration: InputDecoration(
-                  labelText: context.tr('Add tags (optional)'),
-                  hintText: 'caphe, banbe',
-                  prefixIcon: Icon(Icons.tag_rounded),
-                ),
-                textInputAction: TextInputAction.next,
+                      onSelected: (v) => setState(() {
+                        if (v) {
+                          selectedTags.add(t.text('name').toLowerCase());
+                        } else {
+                          selectedTags.remove(t.text('name').toLowerCase());
+                        }
+                      }),
+                    ),
+                  ActionChip(
+                    label: Text(hasMoreTags ? 'Khác +' : 'Thêm tag'),
+                    avatar: const Icon(Icons.tag_rounded, size: 14),
+                    onPressed: () => _showAllTags(
+                      context,
+                      allTagsForCat,
+                      allTagsForCat.skip(7).toList(),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ],
 
-        // ── Ghi chú ────────────────────────────────────────────────────────
-        TextField(
-          controller: note,
-          decoration: InputDecoration(
-            labelText: context.tr('Notes (optional)'),
-            prefixIcon: Icon(Icons.notes_rounded),
+        // ── Ghi chú (icon → expand) ───────────────────────────────────────
+        if (!_showNote && note.text.isEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.sticky_note_2_outlined, size: 16),
+              label: const Text('Thêm ghi chú'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              ),
+              onPressed: () => setState(() => _showNote = true),
+            ),
+          )
+        else
+          TextField(
+            controller: note,
+            autofocus: _showNote && note.text.isEmpty,
+            decoration: InputDecoration(
+              labelText: context.tr('Notes (optional)'),
+              prefixIcon: const Icon(Icons.sticky_note_2_outlined),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.close, size: 16),
+                tooltip: 'Ẩn ghi chú',
+                onPressed: () => setState(() {
+                  _showNote = false;
+                  note.clear();
+                }),
+              ),
+            ),
+            minLines: 1,
+            maxLines: 3,
+            textInputAction: TextInputAction.done,
           ),
-          minLines: 1,
-          maxLines: 3,
-          textInputAction: TextInputAction.done,
-        ),
       ],
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _TypeButton — Nút chọn loại giao dịch dạng Segmented
+// _CategoryChip
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CategoryChip extends StatelessWidget {
+  final Record record;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryChip({
+    required this.record,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return FilterChip(
+      label: Text(record.text('name')),
+      selected: selected,
+      selectedColor: colors.primaryAccent.withValues(alpha: 0.15),
+      checkmarkColor: colors.primaryAccent,
+      onSelected: (_) => onTap(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _ShareBillToggle
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ShareBillToggle extends StatelessWidget {
+  final bool enabled;
+  final int numPeople;
+  final ValueChanged<bool> onToggle;
+  final ValueChanged<int> onNumPeopleChanged;
+
+  const _ShareBillToggle({
+    required this.enabled,
+    required this.numPeople,
+    required this.onToggle,
+    required this.onNumPeopleChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: enabled
+            ? colors.income.withValues(alpha: 0.06)
+            : colors.bgElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: enabled
+              ? colors.income.withValues(alpha: 0.3)
+              : colors.borderSubtle,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.group_outlined,
+                size: 18,
+                color: enabled ? colors.income : colors.textSecondary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Chia bill với nhóm',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: enabled ? colors.income : colors.textPrimary,
+                  ),
+                ),
+              ),
+              Switch(
+                value: enabled,
+                onChanged: onToggle,
+                activeThumbColor: colors.income,
+              ),
+            ],
+          ),
+          if (enabled) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(width: 28),
+                Expanded(
+                  child: Text(
+                    'Số người sẽ trả lại',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
+                _CounterButton(
+                  icon: Icons.remove,
+                  onTap: numPeople > 1
+                      ? () => onNumPeopleChanged(numPeople - 1)
+                      : null,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    '$numPeople',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                ),
+                _CounterButton(
+                  icon: Icons.add,
+                  onTap: numPeople < 20
+                      ? () => onNumPeopleChanged(numPeople + 1)
+                      : null,
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CounterButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  const _CounterButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Material(
+      color: colors.bgSurface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: 16,
+            color: onTap != null ? colors.primaryAccent : colors.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _ShareBillPicker
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ShareBillPicker extends StatelessWidget {
+  final List<Record> bills;
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  const _ShareBillPicker({
+    required this.bills,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.income.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.income.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.link_rounded, size: 16, color: colors.income),
+              const SizedBox(width: 6),
+              Text(
+                'Liên kết Share Bill',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: colors.income,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: bills.any((b) => b.id == selectedId) ? selectedId : null,
+            decoration: const InputDecoration(
+              labelText: 'Chọn bill đang chờ',
+              isDense: true,
+            ),
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Không liên kết')),
+              for (final b in bills)
+                DropdownMenuItem(
+                  value: b.id,
+                  child: Text(
+                    '${Money.format(b.money('total_amount'), b.text('currency'))} · ${b.money('num_paid')}/${b.money('num_people')} người',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (v) => onChanged(v == '' ? null : v),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _TypeButton
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _TypeButton extends StatelessWidget {

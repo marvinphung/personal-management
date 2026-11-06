@@ -155,6 +155,7 @@ class FormDialog extends StatelessWidget {
   final bool saveEnabled;
   final String? error;
   final VoidCallback save;
+  final List<Widget> appBarActions;
   const FormDialog({
     super.key,
     required this.title,
@@ -163,6 +164,7 @@ class FormDialog extends StatelessWidget {
     required this.save,
     this.saveEnabled = true,
     this.error,
+    this.appBarActions = const [],
   });
   @override
   Widget build(BuildContext context) {
@@ -182,6 +184,7 @@ class FormDialog extends StatelessWidget {
               onPressed: busy ? null : () => Navigator.pop(context),
             ),
             actions: [
+              ...appBarActions,
               Padding(
                 padding: const EdgeInsets.only(right: 12),
                 child: FilledButton(

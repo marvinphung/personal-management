@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.google.devtools.ksp") version "2.3.12"
     id("com.android.application")
@@ -79,4 +81,24 @@ dependencies { coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 // Flutter assets are inputs to AGP's Robolectric APK packaging as well.
 tasks.configureEach {
     if (name == "packageDebugUnitTestForUnitTest") dependsOn("copyFlutterAssetsDebug")
+}
+
+// Refuse installable builds missing public client configuration. Never print values.
+tasks.configureEach {
+    if (name.startsWith("compileFlutterBuild")) {
+        doFirst {
+            val defines = (project.findProperty("dart-defines") as? String)
+                .orEmpty().split(',').mapNotNull { encoded ->
+                    runCatching {
+                        String(Base64.getDecoder().decode(encoded), Charsets.UTF_8)
+                    }.getOrNull()
+                }.mapNotNull { entry ->
+                    val parts = entry.split('=', limit = 2)
+                    if (parts.size == 2) parts[0] to parts[1] else null
+                }.toMap()
+            require(listOf("SUPABASE_URL", "SUPABASE_ANON_KEY").all { !defines[it].isNullOrBlank() }) {
+                "Missing Supabase client configuration. From PMV root use python3 linux/tool/flutter_client.py android build apk --debug (or linux/tool/build_apk.py for release)."
+            }
+        }
+    }
 }

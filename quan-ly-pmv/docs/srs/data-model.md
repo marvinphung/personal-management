@@ -53,3 +53,10 @@ Không chuyển nhãn UI thành khóa dữ liệu, không gộp hai danh mục t
 ## Quy đổi giao dịch ngân hàng USD
 
 Khi phân loại thông báo USD, giữ nguyên số tiền nguồn và ghi sổ VND theo tỷ giá cố định 1 USD = 27,000 VND. Lưu số gốc (cent USD), loại tiền nguồn và tỷ giá trong provenance `bank_source`; số tiền giao dịch dùng VND và tham gia tổng/biểu đồ VND đúng một lần. Tài khoản ghi sổ phải là VND. Form hiển thị số USD gốc và số VND quy đổi; chi tiết giao dịch giữ thông tin nguồn. Ví dụ 22.22 USD = 599,940 VND; 0.01 USD = 270 VND. Không đổi các giao dịch đã xác nhận trước đây; retry không tạo trùng.
+
+## Share Bill có theo dõi
+
+- `share_bills`: bill gắn với một giao dịch Chi tiêu (`expense_tx_id`), tổng tiền, tiền tệ, số người sẽ trả lại, số lượt đã nhận, trạng thái `active`/`completed`, ghi chú và thời điểm hoàn tất.
+- `share_bill_payments`: mỗi lần nhận tiền gắn với một bill và một giao dịch Thu nhập (`income_tx_id`), số tiền, ngày nhận và ghi chú.
+- Hai thực thể có cùng metadata chủ sở hữu, ID ổn định, tombstone và cơ chế đồng bộ/outbox như các thực thể tài chính khác. Cloud phải hỗ trợ đọc và ghi cả hai trước khi triển khai bản app sử dụng chúng.
+- Liên kết bill/giao dịch và payment/bill/giao dịch chỉ được trỏ tới dữ liệu cùng chủ sở hữu. Client không ghi trực tiếp vào bảng; thao tác ghi đi qua RPC đồng bộ có kiểm tra owner, conflict và retry idempotent.

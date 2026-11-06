@@ -93,6 +93,23 @@ void main() {
     },
   );
 
+  testWidgets('signed-out startup opens login instead of language gate', (
+    tester,
+  ) async {
+    final c = container();
+    addTearDown(c.dispose);
+    c.read(testSessionProvider.notifier).change(null);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: c, child: const FinanceApp()),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      c.read(routerProvider).routeInformationProvider.value.uri.path,
+      '/login',
+    );
+    expect(find.byType(LanguageWelcomeScreen), findsNothing);
+  });
+
   test('translations retain all interpolation placeholders', () {
     final placeholders = RegExp(r'\{\w+\}');
     for (final entry in vietnamese.entries) {
