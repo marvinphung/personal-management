@@ -33,6 +33,61 @@ void main() {
   });
   tearDown(() => db.close());
   test(
+    'fixed rate converts cents exactly without rounding or changing identity',
+    () {
+      for (final entry in {1: 270, 2222: 599940, 10000: 2700000}.entries) {
+        final usd = BankDraft.fromMap({
+          'id': 'native',
+          'owner': 'user',
+          'fingerprint': 'fixed-rate',
+          'amountMinor': entry.key,
+          'currency': 'USD',
+          'currencyScale': 2,
+          'direction': 'expense',
+          'occurredAtMillis': 1790000000000,
+          'occurredAtSource': 'notification_post_time',
+          'bankCode': 'mbbank',
+        });
+        final row = usd.toTransaction(repo, targetCurrency: 'VND');
+        expect(row.money('amount'), entry.value);
+        expect(row.id, usd.transactionId);
+        expect(usd.amountMinor, entry.key);
+        expect(
+          () => usd.toTransaction(repo, targetCurrency: 'EUR'),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+  test(
+    'USD converts exactly to VND and retry preserves original source',
+    () async {
+      final vnd = repo.create(Entity.accounts, {
+        'name': 'VND',
+        'currency': 'VND',
+      });
+      await repo.save(vnd);
+      final row = draft.toTransaction(
+        repo,
+        accountId: vnd.id,
+        targetCurrency: 'VND',
+      );
+      expect(row.money('amount'), 539730);
+      expect(row.text('currency'), 'VND');
+      final source = row.data['bank_source'] as Map;
+      expect(source['original_amount'], 1999);
+      expect(source['original_currency'], 'USD');
+      expect(source['exchange_rate'], 27000);
+      await BankConfirmation.save(repo, draft, row, []);
+      await BankConfirmation.save(repo, draft, row, []);
+      expect(await db.list(Entity.transactions), hasLength(1));
+      expect(
+        (await db.list(Entity.transactions)).single.money('amount'),
+        539730,
+      );
+    },
+  );
+  test(
     'confirmed normalized transaction uses local repository and pending sync',
     () async {
       final row = draft.toTransaction(repo, accountId: account.id);

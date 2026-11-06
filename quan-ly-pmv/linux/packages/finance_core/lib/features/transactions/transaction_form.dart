@@ -471,6 +471,14 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.record?.data['bank_source'] case final Map source)
+                if (source['original_currency'] == 'USD')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Gốc: ${Money.format(source['original_amount'] as int, 'USD')} · 1 USD = 27,000 VND',
+                    ),
+                  ),
               Text(
                 'Số tiền',
                 style: TextStyle(

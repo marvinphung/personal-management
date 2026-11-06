@@ -558,6 +558,7 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
       final transaction = widget.draft.toTransaction(
         repository,
         accountId: selectedAccountId,
+        targetCurrency: widget.draft.classificationCurrency,
       );
       final patched = transaction.patch({
         'category_id': category,
@@ -664,7 +665,7 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
         .where(
           (a) =>
               !a.flag('is_archived') &&
-              a.text('currency') == widget.draft.currency,
+              a.text('currency') == widget.draft.classificationCurrency,
         )
         .toList();
     final needsAccount = !accounts.any((a) => a.id == widget.accountId);
@@ -710,6 +711,7 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
         .where(
           (d) =>
               d.text('status') == 'active' &&
+              d.text('currency') == widget.draft.classificationCurrency &&
               d.text('direction') ==
                   (actionTag == 'Thu nợ'
                       ? 'lent'
@@ -809,6 +811,13 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                 ),
               ),
 
+              if (widget.draft.currency == 'USD') ...[
+                const SizedBox(height: 12),
+                Text(
+                  '1 USD = 27,000 VND · Ghi sổ: '
+                  '${Money.format(widget.draft.classificationAmount, 'VND')}',
+                ),
+              ],
               const SizedBox(height: 20),
               if (needsAccount)
                 RecordPicker(

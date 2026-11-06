@@ -49,3 +49,7 @@
 | Trường loại trừ cũ | `exclude_from_totals` chỉ còn để tương thích payload; không làm phát sinh công tắc hoặc loại dòng tiền khỏi tổng |
 
 Không chuyển nhãn UI thành khóa dữ liệu, không gộp hai danh mục thu/chi chỉ vì cùng tên, không đổi ID khi đổi theme/ngôn ngữ. Đầu tư có hai danh mục hướng khác nhau nhưng báo cáo riêng kết hợp theo loại hiển thị phù hợp.
+
+## Quy đổi giao dịch ngân hàng USD
+
+Khi phân loại thông báo USD, giữ nguyên số tiền nguồn và ghi sổ VND theo tỷ giá cố định 1 USD = 27,000 VND. Lưu số gốc (cent USD), loại tiền nguồn và tỷ giá trong provenance `bank_source`; số tiền giao dịch dùng VND và tham gia tổng/biểu đồ VND đúng một lần. Tài khoản ghi sổ phải là VND. Form hiển thị số USD gốc và số VND quy đổi; chi tiết giao dịch giữ thông tin nguồn. Ví dụ 22.22 USD = 599,940 VND; 0.01 USD = 270 VND. Không đổi các giao dịch đã xác nhận trước đây; retry không tạo trùng.

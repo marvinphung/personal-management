@@ -47,3 +47,7 @@
 ## Phân biệt các lớp xác minh
 
 Test nghiệp vụ/widget, analyze, build APK và nghiệm thu A54 là các lớp khác nhau. Build thành công không chứng minh widget trên launcher hoặc luồng bàn phím đã được kiểm tra thực tế. Khi có thay đổi giao diện, cần kiểm tra phần bị ảnh hưởng trên thiết bị được giao; khi chưa có thiết bị, ghi đúng phần chưa kiểm tra ngoài SRS.
+
+## Quy đổi giao dịch ngân hàng USD
+
+Khi phân loại thông báo USD, giữ nguyên số tiền nguồn và ghi sổ VND theo tỷ giá cố định 1 USD = 27,000 VND. Lưu số gốc (cent USD), loại tiền nguồn và tỷ giá trong provenance `bank_source`; số tiền giao dịch dùng VND và tham gia tổng/biểu đồ VND đúng một lần. Tài khoản ghi sổ phải là VND. Form hiển thị số USD gốc và số VND quy đổi; chi tiết giao dịch giữ thông tin nguồn. Ví dụ 22.22 USD = 599,940 VND; 0.01 USD = 270 VND. Không đổi các giao dịch đã xác nhận trước đây; retry không tạo trùng.

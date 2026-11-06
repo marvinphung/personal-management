@@ -133,8 +133,8 @@ void main() {
     (tester) async {
       final repo = workspace.repository;
       final account = repo.create(Entity.accounts, {
-        'name': 'USD card',
-        'currency': 'USD',
+        'name': 'VND card',
+        'currency': 'VND',
       });
       final category = repo.create(Entity.categories, {'name': 'Ăn uống'});
       await repo.saveBatch([account, category]);
@@ -162,7 +162,7 @@ void main() {
       await tester.ensureVisible(picker);
       await tester.tap(picker);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('USD card').last);
+      await tester.tap(find.text('VND card').last);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Ăn uống'));
       await tester.tap(find.widgetWithText(ChoiceChip, 'Ăn uống'));
@@ -172,7 +172,10 @@ void main() {
       await tester.pumpAndSettle();
       final saved = (await workspace.db.list(Entity.transactions)).single;
       expect(saved.text('account_id'), account.id);
-      expect(saved.money('amount'), 1999);
+      expect(saved.money('amount'), 539730);
+      expect(saved.text('currency'), 'VND');
+      expect((saved.data['bank_source'] as Map)['original_amount'], 1999);
+      expect((saved.data['bank_source'] as Map)['exchange_rate'], 27000);
       expect(saved.text('description'), draft.description);
       expect(saved.data['bank_source'], isNotNull);
       expect(inbox.rows, isEmpty);

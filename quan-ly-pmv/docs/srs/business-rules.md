@@ -48,3 +48,7 @@
 - **BR-25 — Hiển thị:** mặc định tháng, thứ Hai đầu tuần, không ngày âm; màu ngày đậm dần theo lượng sự kiện. Chữ phải tương phản cả trên nền ngày dày việc và chip màu sáng. Ngày hiện tại vẫn được đánh dấu.
 - **BR-26 — Lựa chọn dùng chung:** app và widget dùng cùng bộ lịch con đã chọn; chọn rỗng vẫn là rỗng, không tự bật lại tất cả. Chọn ngày trên widget cập nhật phần sự kiện; mở app đến đúng ngày được chọn và không xử lý lặp deep link cũ.
 - **BR-27 — Chủ dữ liệu:** mọi bản ghi, pending/outbox và truy cập cloud thuộc đúng người dùng. Không dùng dữ liệu thật để thử chức năng phá hủy hoặc trang trí UI. Không reset DB thật theo một quyết định reset đã dùng trong quá khứ.
+
+## Quy đổi giao dịch ngân hàng USD
+
+Khi phân loại thông báo USD, giữ nguyên số tiền nguồn và ghi sổ VND theo tỷ giá cố định 1 USD = 27,000 VND. Lưu số gốc (cent USD), loại tiền nguồn và tỷ giá trong provenance `bank_source`; số tiền giao dịch dùng VND và tham gia tổng/biểu đồ VND đúng một lần. Tài khoản ghi sổ phải là VND. Form hiển thị số USD gốc và số VND quy đổi; chi tiết giao dịch giữ thông tin nguồn. Ví dụ 22.22 USD = 599,940 VND; 0.01 USD = 270 VND. Không đổi các giao dịch đã xác nhận trước đây; retry không tạo trùng.

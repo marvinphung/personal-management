@@ -32,14 +32,37 @@ class BankDraft {
   };
   String get transactionId =>
       const Uuid().v5(Namespace.url.value, 'finance:bank:$owner:$fingerprint');
-  Record toTransaction(FinanceRepository repository, {String? accountId}) =>
-      repository.create(Entity.transactions, {
-        'amount': amountMinor,
-        'currency': currency,
-        'type': direction,
-        'description': description,
-        'bank_source': {'bank': bankCode, 'timeSource': occurredAtSource},
-        'account_id': accountId,
-        'occurred_at': occurredAt.toUtc().toIso8601String(),
-      }, id: transactionId);
+  static const usdVndRate = 27000;
+  String get classificationCurrency => currency == 'USD' ? 'VND' : currency;
+  int get classificationAmount =>
+      currency == 'USD' ? amountMinor * 270 : amountMinor;
+
+  Record toTransaction(
+    FinanceRepository repository, {
+    String? accountId,
+    String? targetCurrency,
+  }) {
+    final target = targetCurrency ?? currency;
+    if (target != currency && !(currency == 'USD' && target == 'VND')) {
+      throw const FormatException('Unsupported currency conversion');
+    }
+    final converted = target != currency;
+    return repository.create(Entity.transactions, {
+      'amount': converted ? classificationAmount : amountMinor,
+      'currency': target,
+      'type': direction,
+      'description': description,
+      'bank_source': {
+        'bank': bankCode,
+        'timeSource': occurredAtSource,
+        if (converted) ...{
+          'original_amount': amountMinor,
+          'original_currency': currency,
+          'exchange_rate': usdVndRate,
+        },
+      },
+      'account_id': accountId,
+      'occurred_at': occurredAt.toUtc().toIso8601String(),
+    }, id: transactionId);
+  }
 }
