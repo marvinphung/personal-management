@@ -66,3 +66,9 @@ Khi phân loại thông báo USD, giữ nguyên số tiền nguồn và ghi sổ
 - Không quyền, không capture hoặc đổi owner: không thực hiện khôi phục/không tự bật quyền; không báo kết nối thành công.
 - Request rebind không có callback: đến hạn phải báo chưa khôi phục được. Callback thật: mới báo đã khôi phục. Dữ liệu tài chính và draft chờ không bị thay đổi.
 - Reset riêng component phải khôi phục trạng thái cũ; nếu tiến trình chết giữa các bước, mở lại app phục hồi component từ marker bền vững. Marker này không bị xóa cùng phiên/owner.
+
+## Tạo Share Bill từ biến động Chi tiêu
+
+- Thông báo tiền ra có thanh gạt Chia bill với nhóm. Bật rồi chọn được tổng 2 người, Đã trả mặc định 1, danh mục chi và tag đúng danh mục.
+- Xác nhận tạo đúng một giao dịch giữ số tiền/nguồn ngân hàng và một bill liên kết; retry không trùng. Hai tag cùng slug ở hai danh mục phải gắn đúng tag của danh mục đã chọn.
+- Tiền ra giữ Danh mục/Tag; nhận Share Bill bên tiền vào vẫn ẩn hai phần này.

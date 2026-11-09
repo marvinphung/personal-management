@@ -216,4 +216,66 @@ void main() {
       );
     },
   );
+  test(
+    'bank expense share bill retry preserves category tags and source once',
+    () async {
+      final category = repo.create(Entity.categories, {
+        'name': 'Test housing',
+        'type': 'expense',
+      });
+      final tag = repo.create(Entity.tags, {
+        'name': 'testrent',
+        'category_id': category.id,
+      });
+      await repo.saveBatch([category, tag]);
+      final draft = BankDraft.fromMap({
+        'id': 'expense-test',
+        'owner': 'user',
+        'fingerprint': 'bank-expense-share',
+        'bankCode': 'mbbank',
+        'currency': 'VND',
+        'currencyScale': 0,
+        'direction': 'expense',
+        'amountMinor': 800000,
+        'occurredAtMillis': DateTime.now().millisecondsSinceEpoch,
+        'occurredAtSource': 'notification_post_time',
+      });
+      final tx = draft.toTransaction(repo, accountId: account.id).patch({
+        'category_id': category.id,
+      });
+      await BankConfirmation.save(
+        repo,
+        draft,
+        tx,
+        [tag],
+        createShareBill: true,
+        shareBillPeople: 2,
+      );
+      await BankConfirmation.save(
+        repo,
+        draft,
+        tx,
+        [tag],
+        createShareBill: true,
+        shareBillPeople: 2,
+      );
+      final bills = (await db.list(
+        Entity.shareBills,
+      )).where((b) => b.text('expense_tx_id') == tx.id).toList();
+      expect(bills, hasLength(1));
+      expect(bills.single.money('num_people'), 2);
+      expect(bills.single.money('num_paid'), 1);
+      final saved = (await db.get(Entity.transactions, tx.id))!;
+      expect(saved.money('amount'), 800000);
+      expect(saved.text('category_id'), category.id);
+      expect(saved.data['bank_source'], tx.data['bank_source']);
+      expect(
+        (await db.list(Entity.transactionTags))
+            .where((l) => l.text('transaction_id') == tx.id)
+            .single
+            .text('tag_id'),
+        tag.id,
+      );
+    },
+  );
 }

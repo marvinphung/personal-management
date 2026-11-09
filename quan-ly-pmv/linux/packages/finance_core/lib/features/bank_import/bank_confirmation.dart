@@ -15,6 +15,8 @@ class BankConfirmation {
     DebtDirection? disbursementDirection,
     Record? linkedDebt,
     String? shareBillId,
+    bool createShareBill = false,
+    int shareBillPaidPeople = 1,
     int shareBillPeople = 1,
   }) async {
     if (repository.userId != draft.owner ||
@@ -23,6 +25,23 @@ class BankConfirmation {
     }
 
     final importKey = 'bank:${draft.fingerprint}';
+
+    if (createShareBill) {
+      if (shareBillId != null ||
+          borrower != null ||
+          person != null ||
+          linkedDebt != null) {
+        throw const FormatException('Share Bill không kết hợp với Công nợ.');
+      }
+      await ShareBillService(repository).saveExpenseWithShareBill(
+        transaction: transaction,
+        tags: tags,
+        numPeople: shareBillPeople,
+        paidPeople: shareBillPaidPeople,
+        importKey: importKey,
+      );
+      return;
+    }
 
     if (shareBillId != null) {
       await ShareBillService(repository).saveIncomeWithShareBillPayment(

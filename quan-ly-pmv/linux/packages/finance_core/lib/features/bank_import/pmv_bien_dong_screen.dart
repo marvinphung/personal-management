@@ -496,6 +496,7 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
   bool shareBillEnabled = false;
   String? shareBillId;
   int shareBillPeople = 1;
+  int shareBillPaidPeople = 1;
   String? error;
 
   @override
@@ -558,15 +559,22 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
           !_actionTagsForCongNo().contains(actionTag)) {
         throw const FormatException('Vui lòng chọn một hành động công nợ.');
       }
-      if (shareBillEnabled && shareBillId == null) {
+      final isIncome = widget.draft.direction == 'income';
+      if (shareBillEnabled && isIncome && shareBillId == null) {
         throw const FormatException('Vui lòng chọn Share Bill chưa hoàn tất.');
       }
       final selected = allCategories.where((c) => c.id == category).firstOrNull;
       if (shareBillEnabled &&
+          isIncome &&
           !(selected?.text('name').toLowerCase().contains('nhận share') ==
                   true ||
               selected?.text('behavior') == 'share_bill_income')) {
         throw const FormatException('Vui lòng chọn danh mục Nhận share bill.');
+      }
+      if (shareBillEnabled && !isIncome && _isCongNo(allCategories)) {
+        throw const FormatException(
+          'Chia bill cần danh mục chi thông thường, không phải Công nợ.',
+        );
       }
       // Build transaction
       final transaction = widget.draft.toTransaction(
@@ -598,7 +606,11 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
       for (final name in tagNames) {
         chosen.add(
           allTags
-                  .where((t) => t.text('name').toLowerCase() == name)
+                  .where(
+                    (t) =>
+                        t.text('name').toLowerCase() == name &&
+                        t.text('category_id') == category,
+                  )
                   .firstOrNull ??
               repository.create(Entity.tags, {
                 'name': name,
@@ -642,7 +654,9 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
           chosen,
           borrower: borrower,
           linkedDebt: linkedDebt,
-          shareBillId: shareBillEnabled ? shareBillId : null,
+          shareBillId: shareBillEnabled && isIncome ? shareBillId : null,
+          createShareBill: shareBillEnabled && !isIncome,
+          shareBillPaidPeople: shareBillPaidPeople,
           shareBillPeople: shareBillPeople,
           disbursementDirection: actionTag == 'Cho vay'
               ? DebtDirection.lent
@@ -861,18 +875,22 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                   optional: false,
                   onChanged: (id) => setState(() => selectedAccountId = id),
                 ),
-              if (direction == 'income')
+              if (direction == 'income' ||
+                  (direction == 'expense' && !isCongNo))
                 ShareBillControls(
-                  income: true,
+                  income: direction == 'income',
                   enabled: shareBillEnabled,
                   people: shareBillPeople,
+                  paidPeople: shareBillPaidPeople,
+                  onPaidPeople: (v) => setState(() => shareBillPaidPeople = v),
                   bills: shareBills,
                   billId: shareBillId,
                   onEnabled: (v) => setState(() {
                     shareBillEnabled = v;
                     shareBillId = null;
                     shareBillPeople = 1;
-                    if (v && shareCategory != null) {
+                    shareBillPaidPeople = 1;
+                    if (v && direction == 'income' && shareCategory != null) {
                       category = shareCategory.id;
                       selectedTags.clear();
                       newTagController.clear();
@@ -883,7 +901,7 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                   onBill: (v) => setState(() => shareBillId = v),
                 ),
 
-              if (!shareBillEnabled) ...[
+              if (!(shareBillEnabled && direction == 'income')) ...[
                 Text('Danh mục', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 8),
 
@@ -898,6 +916,9 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                         selected: category == cat.id,
                         onSelected: (_) => setState(() {
                           category = cat.id;
+                          if (_isCongNo(allCategories)) {
+                            shareBillEnabled = false;
+                          }
                           selectedTags.clear();
                           actionTag = null;
                           personId = null;
@@ -916,6 +937,9 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                         if (picked != null && mounted) {
                           setState(() {
                             category = picked;
+                            if (_isCongNo(allCategories)) {
+                              shareBillEnabled = false;
+                            }
                             selectedTags.clear();
                             actionTag = null;
                             personId = null;
@@ -1007,7 +1031,9 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                 ),
 
               // Tag chips (non-Công nợ multi-select, Công nợ handled above)
-              if (category != null && !isCongNo && !shareBillEnabled) ...[
+              if (category != null &&
+                  !isCongNo &&
+                  !(shareBillEnabled && direction == 'income')) ...[
                 const SizedBox(height: 16),
                 Text('Tags', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 8),

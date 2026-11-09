@@ -97,7 +97,7 @@ Chênh lệch trong một kỳ chỉ mô tả dòng tiền kỳ đó, không m�
 
 ### Theo dõi bill trả hộ và nhận lại tiền
 
-1. Tạo Chi tiêu thủ công ngoài Công nợ, giữ danh mục hoạt động; bật **Chia bill với nhóm**.
+1. Tạo Chi tiêu thủ công hoặc phân loại thông báo tiền ra ngoài Công nợ, giữ danh mục hoạt động; bật **Chia bill với nhóm**.
 2. Nhập **Tổng số người (gồm bạn)** và **Số người đã trả** (mặc định 1 là bạn), điền tiền/ngày/tài khoản rồi Lưu. Bill và giao dịch chi được lưu cùng nhau.
 3. Mở **Cài đặt → Share Bill** để xem Đang chờ nhận/Đã hoàn tất theo tiền tệ đang xem; bấm bill để xem tiến độ và lịch sử.
 4. Tạo Thu nhập hoặc phân loại biến động tiền vào, bật thanh gạt **Nhận Share Bill**; chọn bill chưa hoàn tất cùng tiền tệ. Số người của lần nhận mặc định 1, bấm **−/+** để thay đổi (ví dụ một người trả hộ hai người thì chọn 2). Nhập số tiền/ngày thực nhận cho giao dịch thủ công; thông báo ngân hàng giữ trường nguồn. Bật theo dõi thì bắt buộc chọn bill; tắt theo dõi vẫn ghi thu thông thường.

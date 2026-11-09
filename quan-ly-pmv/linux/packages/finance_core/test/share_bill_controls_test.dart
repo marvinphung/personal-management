@@ -1,3 +1,5 @@
+import 'package:finance_core/features/bank_import/bank_draft_repository.dart';
+import 'bank_widget_test.dart' show FakeBankInbox;
 import 'package:finance_core/features/bank_import/bank_draft.dart';
 import 'package:finance_core/features/bank_import/pmv_bien_dong_screen.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -260,6 +262,98 @@ void main() {
       await t.tap(find.byType(SwitchListTile));
       await t.pumpAndSettle();
       expect(find.text('Danh mục'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'bank expense can create a two-person bill with scoped category and tag',
+    (t) async {
+      final db = LocalDatabase.memory(), repo = FinanceRepository(db, 'user');
+      final w = UserWorkspace(
+        db,
+        repo,
+        SyncEngine(db, FakeRemote()..offline = true),
+      );
+      addTearDown(w.close);
+      final account = repo.create(Entity.accounts, {'name': 'Test cash'});
+      final house = repo.create(Entity.categories, {
+        'name': 'Home test',
+        'type': 'expense',
+      });
+      final other = repo.create(Entity.categories, {
+        'name': 'Other test',
+        'type': 'expense',
+      });
+      final correct = repo.create(Entity.tags, {
+        'name': 'testrent',
+        'display_name': 'Rent test',
+        'category_id': house.id,
+      });
+      final wrong = repo.create(Entity.tags, {
+        'name': 'testrent',
+        'display_name': 'Rent test',
+        'category_id': other.id,
+      });
+      await repo.saveBatch([account, house, other, wrong, correct]);
+      final draft = BankDraft.fromMap({
+        'id': 'expense-ui',
+        'owner': 'user',
+        'fingerprint': 'expense-ui',
+        'bankCode': 'mbbank',
+        'currency': 'VND',
+        'currencyScale': 0,
+        'direction': 'expense',
+        'amountMinor': 800000,
+        'occurredAtMillis': DateTime.now().millisecondsSinceEpoch,
+        'occurredAtSource': 'notification_post_time',
+      });
+      final inbox = FakeBankInbox()..rows.add(draft);
+      addTearDown(inbox.dispose);
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [
+            workspaceProvider.overrideWith(() => TestWorkspace(w)),
+            bankDraftRepositoryProvider.overrideWithValue(inbox),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: PmvClassifyForm(draft: draft, accountId: account.id),
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byType(SwitchListTile));
+      await t.tap(find.byType(SwitchListTile));
+      await t.pumpAndSettle();
+      expect(find.text('Danh mục'), findsOneWidget);
+      expect(
+        t.widget<ShareBillControls>(find.byType(ShareBillControls)).paidPeople,
+        1,
+      );
+      await t.ensureVisible(find.byTooltip('Tăng số người'));
+      await t.tap(find.byTooltip('Tăng số người'));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.widgetWithText(ChoiceChip, 'Home test'));
+      await t.tap(find.widgetWithText(ChoiceChip, 'Home test'));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.widgetWithText(FilterChip, '#Rent test'));
+      await t.tap(find.widgetWithText(FilterChip, '#Rent test'));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.text('Xác nhận'));
+      await t.tap(find.text('Xác nhận'));
+      await t.pumpAndSettle();
+      final bill = (await db.list(Entity.shareBills)).single;
+      expect(bill.money('num_people'), 2);
+      expect(bill.money('num_paid'), 1);
+      final tx = (await db.list(Entity.transactions)).single;
+      expect(tx.text('category_id'), house.id);
+      expect(tx.money('amount'), 800000);
+      expect(tx.data['bank_source'], isNotNull);
+      expect(
+        (await db.list(Entity.transactionTags)).single.text('tag_id'),
+        correct.id,
+      );
+      expect(inbox.finished, 1);
     },
   );
 }
