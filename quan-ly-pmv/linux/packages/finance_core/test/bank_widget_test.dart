@@ -22,8 +22,14 @@ import 'language_test.dart' show session;
 class FakeBankInbox extends BankDraftRepository {
   final List<BankDraft> rows = [];
   bool failFinish = false, open = false;
-  int finished = 0, reconnects = 0;
-  bool access = false, capture = false, connected = false;
+  int finished = 0, reconnects = 0, debugCalls = 0;
+  @override
+  Future<Map<String, dynamic>> debug() async {
+    debugCalls++;
+    return {'status': 'unresolved', 'connected': false};
+  }
+
+  bool access = false, capture = false, connected = false, failSettings = false;
   @override
   Future<void> reconnect() async {
     reconnects++;
@@ -37,12 +43,16 @@ class FakeBankInbox extends BankDraftRepository {
   @override
   Future<int> count() async => rows.length;
   @override
-  Future<Map<String, dynamic>> settings() async => {
-    'access': access,
-    'capture': capture,
-    'connected': connected,
-    'sources': <Map>[],
-  };
+  Future<Map<String, dynamic>> settings() async {
+    if (failSettings) throw StateError('settings unavailable');
+    return {
+      'access': access,
+      'capture': capture,
+      'connected': connected,
+      'sources': <Map>[],
+    };
+  }
+
   @override
   Future<void> finish(BankDraft draft, {required bool confirmed}) async {
     if (failFinish) throw Exception('disk unavailable');
@@ -183,6 +193,32 @@ void main() {
     },
     variant: TargetPlatformVariant.only(TargetPlatform.android),
   );
+
+  testWidgets('Debug shows unresolved result without claiming recovered', (
+    tester,
+  ) async {
+    inbox.access = true;
+    inbox.capture = true;
+    await tester.pumpWidget(wrap(const BankImportSettings()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Debug'));
+    await tester.pumpAndSettle();
+    expect(inbox.debugCalls, 1);
+    expect(find.textContaining('Chưa khôi phục được'), findsOneWidget);
+    expect(inbox.connected, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('Debug result stays visible when settings fail to load', (
+    tester,
+  ) async {
+    inbox.failSettings = true;
+    await tester.pumpWidget(wrap(const BankImportSettings()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Debug'));
+    await tester.pumpAndSettle();
+    expect(inbox.debugCalls, 1);
+    expect(find.textContaining('Chưa khôi phục được'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets(
     'permission is distinct from connection and reconnect refreshes status',

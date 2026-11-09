@@ -567,8 +567,16 @@ Future<void> showAccountDetail(
     month: ref.read(monthProvider),
     limit: 10000,
   );
-  final totals = Ledger.monthly(
+  final reportRows = Ledger.reportingRows(
     period,
+    shareBills: await workspace.repository.db.list(Entity.shareBills),
+    shareBillPayments: await workspace.repository.db.list(
+      Entity.shareBillPayments,
+    ),
+    categories: await workspace.repository.db.list(Entity.categories),
+  );
+  final totals = Ledger.monthly(
+    reportRows,
     ref.read(monthProvider),
     account.text('currency'),
   );

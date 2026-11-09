@@ -30,6 +30,10 @@ class _SpendingChartState extends State<SpendingChart> {
   @override
   Widget build(BuildContext context) {
     final peak = widget.days.fold<int>(0, (a, b) => a > b ? a : b);
+    final magnitude = widget.days.fold<int>(
+      0,
+      (a, b) => a > b.abs() ? a : b.abs(),
+    );
     final colors = context.colors;
 
     return Card(
@@ -143,9 +147,9 @@ class _SpendingChartState extends State<SpendingChart> {
                                       alignment: Alignment.bottomCenter,
                                       child: Container(
                                         width: width - 14,
-                                        height: peak == 0 || amount == 0
+                                        height: magnitude == 0 || amount == 0
                                             ? 3
-                                            : (amount / peak * 130)
+                                            : (amount.abs() / magnitude * 130)
                                                   .clamp(4, 130)
                                                   .toDouble(),
                                         decoration: BoxDecoration(
@@ -153,6 +157,8 @@ class _SpendingChartState extends State<SpendingChart> {
                                               ? PmvColors.brandGold
                                               : amount == 0
                                               ? colors.borderSubtle
+                                              : amount < 0
+                                              ? colors.income
                                               : colors.primaryAccent,
                                           borderRadius:
                                               const BorderRadius.vertical(
@@ -187,7 +193,11 @@ class _SpendingChartState extends State<SpendingChart> {
                 );
               },
             ),
-            if (peak == 0)
+            if (widget.days.any((amount) => amount < 0))
+              const Text(
+                'Cột xanh lá: nhận lại vượt khoản chi; bấm để xem số tiền có dấu.',
+              ),
+            if (magnitude == 0)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: Center(

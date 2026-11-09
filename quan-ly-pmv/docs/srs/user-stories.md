@@ -21,12 +21,16 @@ Tác nhân của các story là người dùng cá nhân của Quản lý PMV.
 | US-15 | Tôi muốn ghi nhiều lần thu/trả rồi tự đánh dấu xong | Lịch sử đầy đủ, cho trả vượt gốc, dư có thể âm; không tự hoàn tất | FR-13 |
 | US-16 | Tôi muốn sửa khoản công nợ sau khi tạo | Gốc/ngày/người/ghi chú/hạn được cập nhật theo quyền; khoản và giao dịch liên kết khớp | FR-13 |
 | US-17 | Tôi muốn biết vốn đầu tư, tiền về và chênh lệch | Tiền về ghi cả gốc+lãi; báo cáo riêng không mất dữ liệu; dòng tiền vẫn vào tổng thu/chi | FR-14 |
-| US-18 | Tôi muốn đánh dấu khoản mình trả cho cả nhóm | Chi tiêu giữ danh mục hoạt động và thêm Mua chung | FR-15 |
-| US-19 | Tôi muốn ghi người khác chuyển lại phần share bill | Thu nhập → Nhận share bill → tag tên danh mục Chi tiêu; không tự tạo khoản nợ | FR-15 |
+| US-18 | Tôi muốn đánh dấu khoản mình trả cho cả nhóm | Chi tiêu giữ danh mục hoạt động, có Mua chung; có thể bật theo dõi bill và nhập tổng số người và số người đã trả (mặc định đã trả 1 là bạn) | FR-15 |
+| US-19 | Tôi muốn ghi người khác chuyển lại phần share bill | Thu nhập → Nhận share bill → tag tên danh mục Chi tiêu; bật thanh gạt, chọn bill đang chờ và số người trong lần nhận (mặc định 1, có −/+), kể cả khi phân loại tiền vào ngân hàng; không tự tạo khoản nợ | FR-15 |
 | US-20 | Tôi muốn lưu lời nhắc/ghi chú và ghim mục quan trọng | Nội dung, trạng thái ghim, mốc nhắc nhở và liên kết được lưu/đọc lại đúng | FR-16 |
 | US-21 | Tôi muốn xem lịch tháng giống cách đọc Samsung Calendar | Thứ Hai đầu tuần, không lịch âm; có sự kiện theo ngày và mật độ màu | FR-17 |
 | US-22 | Tôi muốn xem lịch/biến động từ màn hình chính | Widget đúng kích thước, số chờ đúng, mở đúng tab/ngày và cùng lựa chọn lịch | FR-18 |
 | US-23 | Tôi muốn app vẫn giữ những gì vừa nhập lúc mất mạng | Dữ liệu local/outbox còn sau restart; có mạng thì retry an toàn và không nhân đôi | FR-20 |
+
+| US-24 | Tôi muốn biết bill nào còn chờ nhóm trả tiền | Cài đặt → Share Bill chia Đang chờ nhận/Đã hoàn tất; xem tổng tiền, tiến độ, lịch sử và hoàn tất thủ công | FR-15, FR-19 |
+
+| US-25 | Khi bộ đọc ngân hàng mất kết nối, tôi muốn thử khôi phục ngay trong app | Bấm Debug, nhận kết quả kiểm tra/khôi phục có xác nhận; không xóa dữ liệu hay tự bật quyền; báo rõ nếu chưa khôi phục được | FR-09, FR-19 |
 
 ## Kịch bản quan trọng
 
@@ -45,8 +49,14 @@ Tác nhân của các story là người dùng cá nhân của Quản lý PMV.
 ### US-18/19 — Mua chung và nhận share bill
 
 - **Given:** tôi thanh toán 500,000 VND tiền ăn cho cả nhóm.
-- **When:** ghi Chi tiêu/Ăn uống/Mua chung; sau đó ghi 200,000 VND tại Thu nhập/Nhận share bill/Ăn uống.
-- **Then:** sổ có hai giao dịch, tổng chi tăng 500,000 và tổng thu tăng 200,000. Không tự bù trừ/xóa khoản gốc hoặc tạo Công nợ.
+- **When:** ghi Chi tiêu/Ăn uống, bật Chia bill với nhóm và nhập tổng 5 người; sau đó ghi 200,000 VND tại Thu nhập/Nhận share bill/Ăn uống.
+- **Then:** sổ giữ hai giao dịch thực tế; nếu bill có tổng 5 người thì tổng chi tăng 300,000 và tổng thu không tăng do nhận share bill. Không xóa khoản gốc hoặc tạo Công nợ.
+
+### US-24 — Theo dõi bill trả hộ và chỉnh sửa
+
+- **Given:** tôi trả hộ 600,000 VND và chờ hai người chuyển lại tiền.
+- **When:** tạo Chi tiêu, bật Chia bill với nhóm, chọn tổng 3 người và giữ Đã trả = 1 là bạn; sau đó ghi hai lần Thu nhập/Nhận share bill, mỗi lần 300,000 VND và chọn cùng bill.
+- **Then:** bill có hai lần nhận và tiến độ 3/3, tự chuyển Đã hoàn tất. Tổng chi là 0 VND (600,000 − 300,000 − 300,000) và tổng thu không tăng do hai lần nhận lại; không tự tạo Công nợ. Có thể dùng Hoàn tất sớm mà không tạo thêm thu nhập. Nếu một lần chuyển trả hộ hai người thì chọn 2 và tiến độ tăng 2; sửa lần nhận này không đếm thêm một lần.
 
 ### US-11 — Retry phân loại
 

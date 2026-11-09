@@ -1,3 +1,4 @@
+import '../transactions/transaction_form.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
@@ -164,8 +165,9 @@ class _ShareBillCard extends StatelessWidget {
     final isCompleted = bill.text('status') == 'completed';
     final total = bill.money('total_amount');
     final currency = bill.text('currency');
-    final perPerson = numPeople > 0 ? total ~/ numPeople : 0;
-    final remaining = total - (perPerson * numPaid);
+
+    final received = ShareBillTotals.received(payments, bill.id);
+    final remaining = total - received;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -209,7 +211,7 @@ class _ShareBillCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '$numPaid/$numPeople người đã trả · ${Money.format(perPerson, currency)}/người',
+                      '$numPaid/$numPeople người đã trả',
                       style: TextStyle(
                         fontSize: 12,
                         color: colors.textSecondary,
@@ -217,7 +219,9 @@ class _ShareBillCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     LinearProgressIndicator(
-                      value: numPeople > 0 ? numPaid / numPeople : 0,
+                      value: numPeople > 0
+                          ? (numPaid / numPeople).clamp(0.0, 1.0)
+                          : 0,
                       backgroundColor: colors.bgElevated,
                       color: isCompleted ? colors.income : colors.primaryAccent,
                       borderRadius: BorderRadius.circular(4),
@@ -231,11 +235,8 @@ class _ShareBillCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'Còn lại',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: colors.textMuted,
-                      ),
+                      'Chi − nhận lại',
+                      style: TextStyle(fontSize: 10, color: colors.textMuted),
                     ),
                     Text(
                       Money.format(remaining, currency),
@@ -269,7 +270,8 @@ class _ShareBillDetail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
-    final allPayments = ref.watch(recordsProvider(Entity.shareBillPayments)).value ?? payments;
+    final allPayments =
+        ref.watch(recordsProvider(Entity.shareBillPayments)).value ?? payments;
     final myPayments = allPayments
         .where((p) => !p.deleted && p.text('share_bill_id') == bill.id)
         .toList();
@@ -277,7 +279,7 @@ class _ShareBillDetail extends ConsumerWidget {
     final numPeople = bill.money('num_people');
     final total = bill.money('total_amount');
     final currency = bill.text('currency');
-    final perPerson = numPeople > 0 ? total ~/ numPeople : 0;
+
     final isCompleted = bill.text('status') == 'completed';
 
     return DraggableScrollableSheet(
@@ -314,7 +316,7 @@ class _ShareBillDetail extends ConsumerWidget {
                         ),
                       ),
                       Text(
-                        '$numPaid/$numPeople người đã trả · ${Money.format(perPerson, currency)}/người',
+                        '$numPaid/$numPeople người đã trả',
                         style: TextStyle(
                           fontSize: 13,
                           color: colors.textSecondary,
@@ -322,6 +324,28 @@ class _ShareBillDetail extends ConsumerWidget {
                       ),
                     ],
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Sửa Share Bill',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () async {
+                    final formContext = Navigator.of(context).context;
+                    final w = await ref.read(workspaceProvider.future);
+                    final tx = await w?.repository.db.get(
+                      Entity.transactions,
+                      bill.text('expense_tx_id'),
+                    );
+                    if (!context.mounted ||
+                        !formContext.mounted ||
+                        tx == null) {
+                      return;
+                    }
+                    final navigator = Navigator.of(context);
+                    navigator.pop();
+                    if (formContext.mounted) {
+                      showTransactionForm(formContext, record: tx);
+                    }
+                  },
                 ),
                 if (!isCompleted)
                   OutlinedButton(
@@ -343,11 +367,17 @@ class _ShareBillDetail extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: LinearProgressIndicator(
-              value: numPeople > 0 ? numPaid / numPeople : 0,
+              value: numPeople > 0 ? (numPaid / numPeople).clamp(0.0, 1.0) : 0,
               backgroundColor: colors.bgElevated,
               color: isCompleted ? colors.income : colors.primaryAccent,
               borderRadius: BorderRadius.circular(4),
               minHeight: 6,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Text(
+              'Đã nhận: ${Money.format(ShareBillTotals.received(myPayments, bill.id), currency)} · Chi − nhận lại: ${Money.format(total - ShareBillTotals.received(myPayments, bill.id), currency)}',
             ),
           ),
           const Divider(height: 1),
@@ -393,6 +423,24 @@ class _ShareBillDetail extends ConsumerWidget {
                             color: colors.textSecondary,
                           ),
                         ),
+                        onTap: () async {
+                          final formContext = Navigator.of(context).context;
+                          final w = await ref.read(workspaceProvider.future);
+                          final tx = await w?.repository.db.get(
+                            Entity.transactions,
+                            p.text('income_tx_id'),
+                          );
+                          if (!context.mounted ||
+                              !formContext.mounted ||
+                              tx == null) {
+                            return;
+                          }
+                          final navigator = Navigator.of(context);
+                          navigator.pop();
+                          if (formContext.mounted) {
+                            showTransactionForm(formContext, record: tx);
+                          }
+                        },
                         trailing: IconButton(
                           icon: Icon(
                             Icons.delete_outline,

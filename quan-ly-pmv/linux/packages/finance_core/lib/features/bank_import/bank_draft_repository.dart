@@ -66,6 +66,8 @@ class BankDraftRepository {
 
   Future<void> refreshWidget() => _call<void>('refreshWidget');
 
+  Future<Map<String, dynamic>> debug() async =>
+      Map<String, dynamic>.from((await _call<Map>('debug'))!);
   Future<void> reconnect() => _call<void>('reconnect');
   Future<void> openSettings() => _call<void>('openSettings');
   Future<bool> consumeOpenPending() async =>

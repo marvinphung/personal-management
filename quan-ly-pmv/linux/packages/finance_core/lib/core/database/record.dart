@@ -117,12 +117,14 @@ class Record {
     },
     Entity.debtPayments => {'note': null, 'linked_transaction_id': null},
     Entity.shareBills => {
-      'num_paid': 0,
+      'initial_paid_people': 1,
+      'num_paid': 1,
       'status': 'active',
       'note': null,
       'completed_at': null,
+      'manual_completed_at': null,
     },
-    Entity.shareBillPayments => {'note': null},
+    Entity.shareBillPayments => {'note': null, 'people_count': 1},
     Entity.notes => {
       'content': '',
       'is_pinned': false,

@@ -93,7 +93,19 @@ Chênh lệch trong một kỳ chỉ mô tả dòng tiền kỳ đó, không m�
 1. Khi thanh toán cho nhóm, giữ danh mục Chi tiêu đúng hoạt động và chọn thêm Mua chung.
 2. Khi nhận lại tiền chia bill, ghi Thu nhập → Nhận share bill.
 3. Chọn tag tên danh mục chi tương ứng, ví dụ Ăn uống hoặc Nhà & hóa đơn.
-4. Lưu từng dòng tiền bình thường; không tự ghép/xóa/bù trừ hai giao dịch.
+4. Lưu từng dòng tiền thực tế, không xóa/bù trừ hai giao dịch; báo cáo tính phần chi cá nhân của bill và không cộng nhận lại vào thu.
+
+### Theo dõi bill trả hộ và nhận lại tiền
+
+1. Tạo Chi tiêu thủ công ngoài Công nợ, giữ danh mục hoạt động; bật **Chia bill với nhóm**.
+2. Nhập **Tổng số người (gồm bạn)** và **Số người đã trả** (mặc định 1 là bạn), điền tiền/ngày/tài khoản rồi Lưu. Bill và giao dịch chi được lưu cùng nhau.
+3. Mở **Cài đặt → Share Bill** để xem Đang chờ nhận/Đã hoàn tất theo tiền tệ đang xem; bấm bill để xem tiến độ và lịch sử.
+4. Tạo Thu nhập hoặc phân loại biến động tiền vào, bật thanh gạt **Nhận Share Bill**; chọn bill chưa hoàn tất cùng tiền tệ. Số người của lần nhận mặc định 1, bấm **−/+** để thay đổi (ví dụ một người trả hộ hai người thì chọn 2). Nhập số tiền/ngày thực nhận cho giao dịch thủ công; thông báo ngân hàng giữ trường nguồn. Bật theo dõi thì bắt buộc chọn bill; tắt theo dõi vẫn ghi thu thông thường.
+5. Mặc định đã trả 1 là bạn; mỗi lần nhận cộng đúng số người đã chọn vào tiến độ; đạt số người dự kiến thì tự chuyển Đã hoàn tất. Có thể bấm **Hoàn tất** sớm trong chi tiết mà không tạo thêm dòng tiền.
+6. Trong lịch sử bill, xóa lần nhận sẽ xóa mềm cả giao dịch thu liên kết, trừ số người của lần nhận và đưa bill tự hoàn tất về đang chờ nếu chưa đủ người; bill Hoàn tất thủ công giữ nguyên.
+7. Bấm **Sửa Share Bill** trong chi tiết để chỉnh giao dịch chi và số người dự kiến; bấm một lần nhận trong lịch sử để chỉnh tiền/ngày/số người hoặc bill liên kết. Mở form phải khôi phục liên kết và giữ các lần nhận đã có khi Lưu.
+
+Theo dõi bill không bắt buộc dùng tag Mua chung và không được tự tạo chỉ vì có tag này. Liên kết nhận tiền dùng được cả nhập thủ công và phân loại ngân hàng, luôn giữ nguồn ngân hàng read-only và retry không tạo thêm lần nhận.
 
 Trong Công nợ chi tiêu, Mua chung chỉ là marker bổ sung; vẫn phải chọn Cho vay/Trả nợ và người/khoản liên quan.
 
@@ -118,3 +130,11 @@ Không có quyền: hiện giải thích và lối xin quyền, không crash. D�
 3. Đóng/mở app: thay đổi chưa sync vẫn còn.
 4. Có mạng: đẩy/retry và đối soát dữ liệu theo chủ; không nhân đôi bản ghi.
 5. Nếu lỗi/xung đột, thông báo trạng thái thật và cho retry; không nói đã sync khi chưa xác nhận.
+
+## FL-13 — Debug bộ đọc ngân hàng (FR-09, FR-19)
+
+1. Khi không nhận được biến động, mở Cài đặt → Ngân hàng → Debug.
+2. Chờ kiểm tra; nút không chạy lặp trong lúc đang xử lý.
+3. Nếu thiếu quyền/đang tắt thu thập, app chỉ rõ thiết lập cần bật; không tự bật thay người dùng.
+4. Nếu mất kết nối, app thử khôi phục và xác minh callback. Hiển thị bộ đọc đang kết nối/đã kết nối lại hoặc chưa khôi phục được.
+5. Khi kết nối đã có, thử thông báo giao dịch mới và xem Biến động. Debug giữ nguyên sổ giao dịch, lựa chọn ngân hàng và thông báo chờ.

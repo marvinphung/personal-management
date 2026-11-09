@@ -1,3 +1,4 @@
+import '../share_bill/share_bill_service.dart';
 import '../../core/database/finance_repository.dart';
 import '../../core/database/record.dart';
 import '../debts/debt_service.dart';
@@ -13,6 +14,8 @@ class BankConfirmation {
     Record? person,
     DebtDirection? disbursementDirection,
     Record? linkedDebt,
+    String? shareBillId,
+    int shareBillPeople = 1,
   }) async {
     if (repository.userId != draft.owner ||
         transaction.id != draft.transactionId) {
@@ -20,6 +23,17 @@ class BankConfirmation {
     }
 
     final importKey = 'bank:${draft.fingerprint}';
+
+    if (shareBillId != null) {
+      await ShareBillService(repository).saveIncomeWithShareBillPayment(
+        transaction: transaction,
+        tags: tags,
+        shareBillId: shareBillId,
+        peopleCount: shareBillPeople,
+        importKey: importKey,
+      );
+      return;
+    }
 
     // 1. Repayment of an existing debt (Thu nợ or Trả nợ)
     if (linkedDebt != null) {

@@ -14,6 +14,18 @@ class CategoryChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = entries.fold<int>(0, (sum, e) => sum + e.value);
+    if (entries.any((e) => e.value < 0)) {
+      // A donut cannot represent negative net costs; retain signed amounts.
+      return Column(
+        children: [
+          for (final entry in entries)
+            ListTile(
+              title: Text(entry.key),
+              trailing: Text(Money.format(entry.value, currency)),
+            ),
+        ],
+      );
+    }
     if (total <= 0) return const SizedBox.shrink();
     final colors = context.colors;
 

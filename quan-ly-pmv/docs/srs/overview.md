@@ -12,8 +12,9 @@ Giao diện dùng nhận diện PMV trong brand kit, phù hợp Android/Material
 2. Phân loại thông báo ngân hàng thành sổ thu/chi mà không cần nhập lại dữ liệu nguồn.
 3. Theo dõi cả cho vay và đi vay, thu/trả từng lần và hoàn tất thủ công.
 4. Theo dõi vốn đầu tư và tiền thu về gồm gốc+lãi.
-5. Xem sự kiện Google Calendar theo tháng và truy cập nhanh bằng widget.
-6. Lưu cục bộ và đồng bộ Supabase, giữ được dữ liệu khi mất mạng hoặc mở lại app.
+5. Theo dõi bill trả hộ nhóm, các lần nhận lại tiền và tiến độ hoàn tất.
+6. Xem sự kiện Google Calendar theo tháng và truy cập nhanh bằng widget.
+7. Lưu cục bộ và đồng bộ Supabase, giữ được dữ liệu khi mất mạng hoặc mở lại app.
 
 ## Tác nhân và hệ thống liên quan
 
@@ -32,7 +33,7 @@ Giao diện dùng nhận diện PMV trong brand kit, phù hợp Android/Material
 | Tổng quan | Thu nhập, chi tiêu, chênh lệch, thống kê, biểu đồ và giao dịch gần đây |
 | Thu chi | Danh sách, tìm/lọc, chi tiết, tạo/sửa thu nhập/chi tiêu/chuyển khoản |
 | Biến động | Các thông báo ngân hàng chờ phân loại, xác nhận hoặc bỏ qua/hoàn tác |
-| Cài đặt | Công nợ, Đầu tư, Lịch, Ghi chú, quản lý dữ liệu, ngân hàng, giao diện, ngôn ngữ và đồng bộ |
+| Cài đặt | Công nợ, Share Bill, Đầu tư, Lịch, Ghi chú, quản lý dữ liệu, ngân hàng, giao diện, ngôn ngữ và đồng bộ |
 
 Thanh điều hướng chỉ hiện icon; tooltip và nhãn hỗ trợ tiếp cận vẫn có. Công nợ và Đầu tư không có tab chính riêng; dòng tiền của chúng vẫn tham gia tổng thu/chi.
 

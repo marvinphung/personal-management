@@ -22,6 +22,16 @@ class BankDraftFlutterBridge(private val activity: Activity, messenger: BinaryMe
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "consumeOpenPending" -> { result.success(openPending); openPending = false }
+                "debug" -> {
+                    BankInbox.executor.execute {
+                        val expectedOwner = (call.arguments as? Map<*, *>)?.get("owner") as? String
+                        if (expectedOwner == null || BankInbox.owner(activity) != expectedOwner) {
+                            main.post { result.error("bank_inbox", "Please sign in again", null) }
+                        } else main.post {
+                            ListenerRecovery.debug(activity, expectedOwner) { response -> result.success(response) }
+                        }
+                    }
+                }
                 "openSettings" -> {
                     try { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); result.success(null) }
                     catch (_: Exception) { result.error("settings", "Could not open notification access settings", null) }

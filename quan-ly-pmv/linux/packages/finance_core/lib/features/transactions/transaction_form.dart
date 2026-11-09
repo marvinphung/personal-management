@@ -1,3 +1,4 @@
+import '../share_bill/share_bill_controls.dart';
 import '../catalog/person_picker.dart';
 import '../../core/utils/money_input_formatter.dart';
 import 'package:flutter/material.dart';
@@ -64,7 +65,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
   String? _lastExpenseCategory, _lastIncomeCategory;
   bool _showNote = false;
   bool _shareBillEnabled = false;
-  int _shareBillPeople = 2;
+  int _shareBillPeople = 1;
+  int _shareBillPaidPeople = 1, _shareBillMinimumPaid = 1;
+  bool _shareLinksLoaded = false, _shareLinked = false;
   String? _selectedShareBillId;
 
   bool get bankReadOnly =>
@@ -111,6 +114,16 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       error = null;
     });
     try {
+      if (widget.record != null && !_shareLinksLoaded) {
+        throw const FormatException(
+          'Đang tải liên kết Share Bill, vui lòng thử lại.',
+        );
+      }
+      if (_shareLinked && (!_shareBillEnabled || isCongNo)) {
+        throw const FormatException(
+          'Giữ liên kết Share Bill khi chỉnh sửa giao dịch này.',
+        );
+      }
       final picked = accounts
           .where((a) => a.id == (type == 'transfer' ? from : account))
           .firstOrNull;
@@ -127,7 +140,26 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
       if (isCongNo && actionTag == null) {
         throw const FormatException('Vui lòng chọn hành động công nợ.');
       }
-      if (_shareBillEnabled && type == 'expense' && !isCongNo && !bankReadOnly) {
+      if (_shareBillEnabled && type == 'income') {
+        final selected =
+            (ref.read(recordsProvider(Entity.categories)).value ?? [])
+                .where((c) => c.id == category)
+                .firstOrNull;
+        if (!_isNhanShareBillCategory(selected)) {
+          throw const FormatException(
+            'Vui lòng chọn danh mục Nhận share bill.',
+          );
+        }
+      }
+      if (_shareBillEnabled &&
+          type == 'income' &&
+          _selectedShareBillId == null) {
+        throw const FormatException('Vui lòng chọn Share Bill chưa hoàn tất.');
+      }
+      if (_shareBillEnabled &&
+          type == 'expense' &&
+          !isCongNo &&
+          !bankReadOnly) {
         if (_shareBillPeople < 1) {
           throw const FormatException('Số người phải ít nhất là 1.');
         }
@@ -151,9 +183,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             widget.record?.patch(values) ??
             repository.create(Entity.transactions, values);
         final chosen = <Record>[];
-        final names = {
-          ...selectedTags,
-        };
+        final names = {...selectedTags};
         if (isCongNo && actionTag != null) {
           names.add(normalizeTagName(actionTag!));
         }
@@ -236,14 +266,17 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             transaction: transaction,
             tags: chosen,
             numPeople: _shareBillPeople,
+            paidPeople: _shareBillPaidPeople,
           );
-        } else if (_selectedShareBillId != null &&
+        } else if (_shareBillEnabled &&
+            _selectedShareBillId != null &&
             type == 'income' &&
             widget.bankDraft == null) {
           await ShareBillService(repository).saveIncomeWithShareBillPayment(
             transaction: transaction,
             tags: chosen,
             shareBillId: _selectedShareBillId!,
+            peopleCount: _shareBillPeople,
           );
         } else {
           await repository.saveTransaction(transaction, chosen);
@@ -275,7 +308,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   void _switchType(String newType) {
-    if (type == newType) return;
+    if (type == newType || _shareLinked) return;
     if (type == 'expense') _lastExpenseCategory = category;
     if (type == 'income') _lastIncomeCategory = category;
     setState(() {
@@ -308,7 +341,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
     int limit = 5,
   }) {
     final counts = <String, int>{};
-    for (final tx in transactions.where((t) => !t.deleted && t.text('type') == type)) {
+    for (final tx in transactions.where(
+      (t) => !t.deleted && t.text('type') == type,
+    )) {
       final cid = tx.text('category_id');
       if (cid.isNotEmpty) counts[cid] = (counts[cid] ?? 0) + 1;
     }
@@ -334,56 +369,81 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
     bool isCongNo,
   ) {
     final congNoExpenseCat = type == 'expense'
-        ? allCategories.where((c) => !c.flag('is_archived') &&
-              (c.text('behavior') == 'cong_no_expense' || c.text('behavior') == 'lending'))
-            .firstOrNull
+        ? allCategories
+              .where(
+                (c) =>
+                    !c.flag('is_archived') &&
+                    (c.text('behavior') == 'cong_no_expense' ||
+                        c.text('behavior') == 'lending'),
+              )
+              .firstOrNull
         : null;
     final congNoIncomeCat = type == 'income'
-        ? allCategories.where((c) => !c.flag('is_archived') &&
-              c.text('behavior') == 'cong_no_income')
-            .firstOrNull
+        ? allCategories
+              .where(
+                (c) =>
+                    !c.flag('is_archived') &&
+                    c.text('behavior') == 'cong_no_income',
+              )
+              .firstOrNull
         : null;
     final investExpenseCat = type == 'expense'
-        ? allCategories.where((c) => !c.flag('is_archived') &&
-              c.text('behavior') == 'investment_expense')
-            .firstOrNull
+        ? allCategories
+              .where(
+                (c) =>
+                    !c.flag('is_archived') &&
+                    c.text('behavior') == 'investment_expense',
+              )
+              .firstOrNull
         : null;
     final investIncomeCat = type == 'income'
-        ? allCategories.where((c) => !c.flag('is_archived') &&
-              c.text('behavior') == 'investment_income')
-            .firstOrNull
+        ? allCategories
+              .where(
+                (c) =>
+                    !c.flag('is_archived') &&
+                    c.text('behavior') == 'investment_income',
+              )
+              .firstOrNull
         : null;
 
     return PopupMenuButton<String>(
       icon: const Icon(Icons.add_circle_outline_rounded),
       tooltip: 'Tính năng đặc biệt',
       onSelected: (value) {
+        if (_shareLinked) return;
         switch (value) {
           case 'share_bill':
             setState(() {
               _shareBillEnabled = !_shareBillEnabled;
-              if (_shareBillEnabled) { actionTag = null; selectedDebtId = null; }
+              if (_shareBillEnabled) {
+                actionTag = null;
+                selectedDebtId = null;
+              }
             });
           case 'cong_no':
             final target = congNoExpenseCat ?? congNoIncomeCat;
-            if (target != null) setState(() {
-              category = target.id;
-              _shareBillEnabled = false;
-              _selectedShareBillId = null;
-              selectedTags.clear();
-              actionTag = null;
-              selectedDebtId = null;
-            });
+            if (target != null) {
+              setState(() {
+                category = target.id;
+                _shareBillEnabled = false;
+                _selectedShareBillId = null;
+                selectedTags.clear();
+                actionTag = null;
+                selectedDebtId = null;
+              });
+            }
           case 'dau_tu':
             final target = investExpenseCat ?? investIncomeCat;
-            if (target != null) setState(() {
-              category = target.id;
-              _shareBillEnabled = false;
-              _selectedShareBillId = null;
-              selectedTags.clear();
-              actionTag = null;
-              selectedDebtId = null;
-            });
+            if (target != null) {
+              setState(() {
+                category = target.id;
+                _shareBillEnabled = false;
+                _selectedShareBillId = null;
+                selectedTags.clear();
+                actionTag = null;
+                selectedDebtId = null;
+              });
+            }
         }
       },
       itemBuilder: (ctx) => [
@@ -392,11 +452,15 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             value: 'share_bill',
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(_shareBillEnabled && !isCongNo
-                  ? Icons.group_rounded : Icons.group_outlined),
+              leading: Icon(
+                _shareBillEnabled && !isCongNo
+                    ? Icons.group_rounded
+                    : Icons.group_outlined,
+              ),
               title: const Text('Chia bill với nhóm'),
               trailing: (_shareBillEnabled && !isCongNo)
-                  ? const Icon(Icons.check, size: 16) : null,
+                  ? const Icon(Icons.check, size: 16)
+                  : null,
             ),
           ),
         if (congNoExpenseCat != null || congNoIncomeCat != null)
@@ -404,8 +468,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             value: 'cong_no',
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(isCongNo
-                  ? Icons.handshake_rounded : Icons.handshake_outlined),
+              leading: Icon(
+                isCongNo ? Icons.handshake_rounded : Icons.handshake_outlined,
+              ),
               title: const Text('Công nợ'),
               trailing: isCongNo ? const Icon(Icons.check, size: 16) : null,
             ),
@@ -481,9 +546,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Center(
@@ -520,11 +585,18 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                           color: colors.primaryAccent.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(Icons.add, color: colors.primaryAccent, size: 18),
+                        child: Icon(
+                          Icons.add,
+                          color: colors.primaryAccent,
+                          size: 18,
+                        ),
                       ),
                       title: Text(
                         'Thêm danh mục mới',
-                        style: TextStyle(color: colors.primaryAccent, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          color: colors.primaryAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -549,7 +621,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(type == 'expense' ? 'Danh mục chi tiêu mới' : 'Danh mục thu nhập mới'),
+        title: Text(
+          type == 'expense' ? 'Danh mục chi tiêu mới' : 'Danh mục thu nhập mới',
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -558,7 +632,8 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             hintText: 'Nhập tên danh mục…',
           ),
           textCapitalization: TextCapitalization.words,
-          onSubmitted: (_) => _saveNewCategory(ctx, controller.text, allCategories),
+          onSubmitted: (_) =>
+              _saveNewCategory(ctx, controller.text, allCategories),
         ),
         actions: [
           TextButton(
@@ -566,7 +641,8 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             child: const Text('Hủy'),
           ),
           FilledButton(
-            onPressed: () => _saveNewCategory(ctx, controller.text, allCategories),
+            onPressed: () =>
+                _saveNewCategory(ctx, controller.text, allCategories),
             child: const Text('Thêm'),
           ),
         ],
@@ -645,8 +721,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                     child: Text(
                       'Thẻ (Tags)',
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   Padding(
@@ -665,9 +742,13 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                                 setModalState(() {});
                                 setState(() {
                                   if (v) {
-                                    selectedTags.add(t.text('name').toLowerCase());
+                                    selectedTags.add(
+                                      t.text('name').toLowerCase(),
+                                    );
                                   } else {
-                                    selectedTags.remove(t.text('name').toLowerCase());
+                                    selectedTags.remove(
+                                      t.text('name').toLowerCase(),
+                                    );
                                   }
                                 });
                               },
@@ -690,10 +771,8 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                               prefixIcon: const Icon(Icons.tag_rounded),
                             ),
                             textInputAction: TextInputAction.done,
-                            onSubmitted: (v) => _addTagsFromInput(
-                              v,
-                              allTagsForCategory,
-                            ),
+                            onSubmitted: (v) =>
+                                _addTagsFromInput(v, allTagsForCategory),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -773,9 +852,41 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
     final allTxs = txState.value ?? [];
     final tags = tagSuggestions(tagState.value ?? [], links.value ?? []);
     final shareBillState = ref.watch(recordsProvider(Entity.shareBills));
-    final activeShareBills = (shareBillState.value ?? [])
-        .where((b) => !b.deleted && b.text('status') == 'active')
-        .toList();
+    final sharePaymentsState = ref.watch(
+      recordsProvider(Entity.shareBillPayments),
+    );
+    if (!_shareLinksLoaded &&
+        widget.record != null &&
+        shareBillState.hasValue &&
+        sharePaymentsState.hasValue) {
+      _shareLinksLoaded = true;
+      final bill = shareBillState.value!
+          .where(
+            (b) => !b.deleted && b.text('expense_tx_id') == widget.record!.id,
+          )
+          .firstOrNull;
+      final payment = sharePaymentsState.value!
+          .where(
+            (p) => !p.deleted && p.text('income_tx_id') == widget.record!.id,
+          )
+          .firstOrNull;
+      if (bill != null || payment != null) {
+        _shareLinked = true;
+        _shareBillEnabled = true;
+        _selectedShareBillId = payment?.text('share_bill_id');
+        if (bill != null) {
+          final receipts = sharePaymentsState.value!
+              .where((p) => !p.deleted && p.text('share_bill_id') == bill.id)
+              .fold(0, (sum, p) => sum + (p.data['people_count'] as int? ?? 1));
+          _shareBillMinimumPaid = receipts + 1;
+          _shareBillPaidPeople =
+              (bill.data['initial_paid_people'] as int? ?? 1) + receipts;
+        }
+        _shareBillPeople =
+            bill?.money('num_people') ??
+            (payment!.data['people_count'] as int? ?? 1);
+      }
+    }
 
     final ready =
         accountState.hasValue &&
@@ -829,8 +940,6 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         catBehavior == 'lending' ||
         selectedCat?.text('name') == 'Công nợ';
 
-    final isNhanShareBill = _isNhanShareBillCategory(selectedCat);
-
     final activeDebts = allDebts
         .where(
           (d) =>
@@ -852,11 +961,53 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
             ?.text('currency') ??
         'VND';
 
+    final activeShareBills = (shareBillState.value ?? [])
+        .where(
+          (b) =>
+              !b.deleted &&
+              b.text('currency') == currency &&
+              (b.text('status') == 'active' || b.id == _selectedShareBillId),
+        )
+        .toList();
+    final shareIncomeCategory = allCategories
+        .where(
+          (c) =>
+              !c.deleted &&
+              !c.flag('is_archived') &&
+              c.text('type') == 'income' &&
+              _isNhanShareBillCategory(c),
+        )
+        .firstOrNull;
+
     // Top categories and tags
     final topCats = _topCategories(categories, allTxs);
     final allTagsForCat = tagsForCategory(tags, category);
     final topTags = allTagsForCat.take(7).toList();
     final hasMoreTags = allTagsForCat.length > 7;
+
+    final shareControls = ShareBillControls(
+      income: type == 'income',
+      enabled: _shareBillEnabled,
+      linked: _shareLinked,
+      people: _shareBillPeople,
+      paidPeople: _shareBillPaidPeople,
+      minimumPaid: _shareBillMinimumPaid,
+      onPaidPeople: (v) => setState(() => _shareBillPaidPeople = v),
+      bills: activeShareBills,
+      billId: _selectedShareBillId,
+      onEnabled: (v) => setState(() {
+        _shareBillEnabled = v;
+        _selectedShareBillId = null;
+        _shareBillPeople = 1;
+        _shareBillPaidPeople = 1;
+        if (v && type == 'income' && shareIncomeCategory != null) {
+          category = shareIncomeCategory.id;
+          selectedTags.clear();
+        }
+      }),
+      onPeople: (v) => setState(() => _shareBillPeople = v),
+      onBill: (v) => setState(() => _selectedShareBillId = v),
+    );
 
     return FormDialog(
       title: widget.bankDraft != null
@@ -866,8 +1017,13 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           : 'Chỉnh sửa giao dịch',
       busy: busy,
       saveEnabled: ready,
-      save: () => save(accounts, tags,
-          isCongNo: isCongNo, people: people, debts: allDebts),
+      save: () => save(
+        accounts,
+        tags,
+        isCongNo: isCongNo,
+        people: people,
+        debts: allDebts,
+      ),
       appBarActions: [
         if (type != 'transfer')
           _buildBubbleButton(context, allCategories, isCongNo),
@@ -961,6 +1117,8 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
               ],
             ),
           ),
+
+        if (type == 'income') shareControls,
 
         // ── Số tiền ──────────────────────────────────────────────────────
         Container(
@@ -1147,7 +1305,7 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
         ),
 
         // ── Danh mục quick-pick ───────────────────────────────────────────
-        if (type != 'transfer') ...[
+        if (type != 'transfer' && !(type == 'income' && _shareBillEnabled)) ...[
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1178,11 +1336,8 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
                   ActionChip(
                     label: const Text('Khác'),
                     avatar: const Icon(Icons.expand_more, size: 16),
-                    onPressed: () => _showAllCategories(
-                      context,
-                      categories,
-                      allCategories,
-                    ),
+                    onPressed: () =>
+                        _showAllCategories(context, categories, allCategories),
                   ),
                 ],
               ),
@@ -1264,48 +1419,31 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           ),
         ],
 
-        // ── Share bill toggle (expense, non-debt, non-bank) ───────────────
-        if (type == 'expense' && !isCongNo && !bankReadOnly)
-          _ShareBillToggle(
-            enabled: _shareBillEnabled,
-            numPeople: _shareBillPeople,
-            onToggle: (v) => setState(() => _shareBillEnabled = v),
-            onNumPeopleChanged: (v) => setState(() => _shareBillPeople = v),
-          ),
-
-        // ── Share bill picker (income, Nhận share bill) ───────────────────
-        if (type == 'income' && isNhanShareBill && activeShareBills.isNotEmpty)
-          _ShareBillPicker(
-            bills: activeShareBills,
-            selectedId: _selectedShareBillId,
-            onChanged: (v) => setState(() => _selectedShareBillId = v),
-          ),
-
-        // ── Mua chung tag cho Công nợ ─────────────────────────────────────
         if (isCongNo && type == 'expense')
           Wrap(
             spacing: 6,
-            children: tags
-                .where(
-                  (t) =>
-                      t.text('category_id') == category &&
-                      TagDisplay.forRecord(t) == 'Mua chung',
-                )
-                .map(
-                  (t) => FilterChip(
-                    label: Text('#${TagDisplay.forRecord(t)}'),
-                    selected: selectedTags.contains(t.text('name')),
-                    onSelected: (v) => setState(() {
-                      if (v) {
-                        selectedTags.add(t.text('name'));
-                      } else {
-                        selectedTags.remove(t.text('name'));
-                      }
-                    }),
+            children: [
+              for (final tag in allTagsForCat.where(
+                (t) => TagDisplay.forRecord(t) == 'Mua chung',
+              ))
+                FilterChip(
+                  label: Text('#${TagDisplay.forRecord(tag)}'),
+                  selected: selectedTags.contains(
+                    tag.text('name').toLowerCase(),
                   ),
-                )
-                .toList(),
+                  onSelected: (v) => setState(() {
+                    if (v) {
+                      selectedTags.add(tag.text('name').toLowerCase());
+                    } else {
+                      selectedTags.remove(tag.text('name').toLowerCase());
+                    }
+                  }),
+                ),
+            ],
           ),
+
+        if (type == 'expense' && !isCongNo && (!bankReadOnly || _shareLinked))
+          shareControls,
 
         // ── Tài khoản ─────────────────────────────────────────────────────
         RecordPicker(
@@ -1338,7 +1476,9 @@ class _TransactionFormState extends ConsumerState<TransactionForm> {
           ),
 
         // ── Tags quick-pick ───────────────────────────────────────────────
-        if (!isCongNo && category != null) ...[
+        if (!isCongNo &&
+            category != null &&
+            !(type == 'income' && _shareBillEnabled)) ...[
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1452,210 +1592,6 @@ class _CategoryChip extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // _ShareBillToggle
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _ShareBillToggle extends StatelessWidget {
-  final bool enabled;
-  final int numPeople;
-  final ValueChanged<bool> onToggle;
-  final ValueChanged<int> onNumPeopleChanged;
-
-  const _ShareBillToggle({
-    required this.enabled,
-    required this.numPeople,
-    required this.onToggle,
-    required this.onNumPeopleChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: enabled
-            ? colors.income.withValues(alpha: 0.06)
-            : colors.bgElevated,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: enabled
-              ? colors.income.withValues(alpha: 0.3)
-              : colors.borderSubtle,
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.group_outlined,
-                size: 18,
-                color: enabled ? colors.income : colors.textSecondary,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Chia bill với nhóm',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: enabled ? colors.income : colors.textPrimary,
-                  ),
-                ),
-              ),
-              Switch(
-                value: enabled,
-                onChanged: onToggle,
-                activeThumbColor: colors.income,
-              ),
-            ],
-          ),
-          if (enabled) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const SizedBox(width: 28),
-                Expanded(
-                  child: Text(
-                    'Số người sẽ trả lại',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                ),
-                _CounterButton(
-                  icon: Icons.remove,
-                  onTap: numPeople > 1
-                      ? () => onNumPeopleChanged(numPeople - 1)
-                      : null,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    '$numPeople',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                ),
-                _CounterButton(
-                  icon: Icons.add,
-                  onTap: numPeople < 20
-                      ? () => onNumPeopleChanged(numPeople + 1)
-                      : null,
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CounterButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-  const _CounterButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Material(
-      color: colors.bgSurface,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: 32,
-          height: 32,
-          alignment: Alignment.center,
-          child: Icon(
-            icon,
-            size: 16,
-            color: onTap != null ? colors.primaryAccent : colors.textMuted,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _ShareBillPicker
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _ShareBillPicker extends StatelessWidget {
-  final List<Record> bills;
-  final String? selectedId;
-  final ValueChanged<String?> onChanged;
-
-  const _ShareBillPicker({
-    required this.bills,
-    required this.selectedId,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.income.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.income.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.link_rounded, size: 16, color: colors.income),
-              const SizedBox(width: 6),
-              Text(
-                'Liên kết Share Bill',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: colors.income,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: bills.any((b) => b.id == selectedId) ? selectedId : null,
-            decoration: const InputDecoration(
-              labelText: 'Chọn bill đang chờ',
-              isDense: true,
-            ),
-            isExpanded: true,
-            items: [
-              const DropdownMenuItem(value: '', child: Text('Không liên kết')),
-              for (final b in bills)
-                DropdownMenuItem(
-                  value: b.id,
-                  child: Text(
-                    '${Money.format(b.money('total_amount'), b.text('currency'))} · ${b.money('num_paid')}/${b.money('num_people')} người',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-            ],
-            onChanged: (v) => onChanged(v == '' ? null : v),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _TypeButton
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _TypeButton extends StatelessWidget {

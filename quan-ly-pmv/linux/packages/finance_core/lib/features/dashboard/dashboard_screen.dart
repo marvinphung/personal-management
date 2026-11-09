@@ -28,13 +28,35 @@ class DashboardScreen extends ConsumerWidget {
         links = ref.watch(recordsProvider(Entity.transactionTags)).value ?? [],
         debts = ref.watch(recordsProvider(Entity.debts)).value ?? [],
         payments = ref.watch(recordsProvider(Entity.debtPayments)).value ?? [];
+    final billState = ref.watch(recordsProvider(Entity.shareBills));
+    final receiptState = ref.watch(recordsProvider(Entity.shareBillPayments));
+    if (billState.hasError || receiptState.hasError) {
+      return Center(
+        child: TextButton(
+          onPressed: () {
+            ref.invalidate(recordsProvider(Entity.shareBills));
+            ref.invalidate(recordsProvider(Entity.shareBillPayments));
+          },
+          child: const Text('Không thể tải Share Bill. Thử lại'),
+        ),
+      );
+    }
+    if (!billState.hasValue || !receiptState.hasValue) {
+      return const Center(child: CircularProgressIndicator());
+    }
     final colors = context.colors;
 
     return AsyncRecords(
       value: ref.watch(monthTransactionsProvider),
       builder: (rows) {
-        final totals = Ledger.monthly(rows, month, currency);
-        final spending = rows.where(
+        final reportRows = Ledger.reportingRows(
+          rows,
+          shareBills: billState.value!,
+          shareBillPayments: receiptState.value!,
+          categories: categories,
+        );
+        final totals = Ledger.monthly(reportRows, month, currency);
+        final spending = reportRows.where(
           (t) =>
               t.text('currency') == currency &&
               t.text('type') == 'expense' &&
@@ -155,7 +177,7 @@ class DashboardScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               child: SpendingChart(
-                days: dailySpending(rows, month, currency),
+                days: dailySpending(reportRows, month, currency),
                 month: month,
                 currency: currency,
               ),

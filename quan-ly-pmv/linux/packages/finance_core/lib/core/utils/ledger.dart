@@ -13,6 +13,56 @@ class MonthlyTotals {
 }
 
 class Ledger {
+  /// Reporting-only projection. Never persist these amounts or use for balances.
+  static List<Record> reportingRows(
+    Iterable<Record> transactions, {
+    Iterable<Record> shareBills = const [],
+    Iterable<Record> shareBillPayments = const [],
+    Iterable<Record> categories = const [],
+  }) {
+    final bills = {
+      for (final b in shareBills.where((b) => !b.deleted))
+        b.text('expense_tx_id'): b,
+    };
+    final receivedByBill = <String, int>{};
+    for (final p in shareBillPayments.where((p) => !p.deleted)) {
+      receivedByBill.update(
+        p.text('share_bill_id'),
+        (amount) => amount + p.money('amount'),
+        ifAbsent: () => p.money('amount'),
+      );
+    }
+    final receipts = {
+      for (final p in shareBillPayments.where((p) => !p.deleted))
+        p.text('income_tx_id'),
+    };
+    final shareCategories = {
+      for (final c in categories.where(
+        (c) =>
+            c.text('type') == 'income' &&
+            (c.text('behavior') == 'share_bill_income' ||
+                c.text('name').toLowerCase().contains('nhận share') ||
+                c.text('name').toLowerCase().contains('nhan share')),
+      ))
+        c.id,
+    };
+    return [
+      for (final t in transactions)
+        if (!(t.text('type') == 'income' &&
+            (receipts.contains(t.id) ||
+                shareCategories.contains(t.text('category_id')))))
+          if (t.text('type') == 'expense' &&
+              bills.containsKey(t.id) &&
+              bills[t.id]!.text('currency') == t.text('currency'))
+            t.patch({
+              'amount':
+                  t.money('amount') - (receivedByBill[bills[t.id]!.id] ?? 0),
+            })
+          else
+            t,
+    ];
+  }
+
   static bool countsInTotals(Record t) => !t.deleted && !isScheduled(t);
 
   static bool isScheduled(Record t, {DateTime? now}) =>

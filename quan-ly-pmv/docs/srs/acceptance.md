@@ -38,7 +38,10 @@
 | AC-15 | Trả vượt/Hoàn tất | Dư âm được giữ, không tự hoàn tất; nút Hoàn tất giữ lịch sử, không sinh cân bằng | FR-13/US-15 |
 | AC-16 | Sửa công nợ | Ngày/gốc liên kết khớp, không mất thanh toán/trạng thái, bank source vẫn read-only | FR-13/US-16 |
 | AC-17 | Đầu tư | Vốn, toàn bộ tiền về và chênh lệch đúng với bộ lọc cả hai chiều; vẫn vào tổng chung | FR-14/US-17 |
-| AC-18 | Share bill | Mua chung ở mọi danh mục chi; Nhận share bill có tag tương ứng; không tự tạo nợ/net | FR-15/US-18–19 |
+| AC-18 | Mua chung | Mua chung ở mọi danh mục chi; Nhận share bill có tag tương ứng; không tự tạo nợ/net | FR-15/US-18–19 |
+| AC-23 | Tạo bill và nhận tiền | Bật theo dõi khi tạo chi, mặc định 1 người, −/+ không xuống dưới 1; bật nhận Share Bill ở Thu nhập/phân loại ngân hàng chọn đúng bill chưa hoàn tất cùng tiền tệ; một lần nhận có thể trả hộ nhiều người; bill/payment/giao dịch/outbox nguyên tử; retry/sửa không tăng trùng tiến độ | FR-15/US-18–19, US-24 |
+| AC-24 | Tiến độ và hoàn tất bill | Hiện nhóm chờ/hoàn tất, tiến độ và lịch sử; tiến độ bằng số đã trả ban đầu cộng số người các lần nhận, không đếm số giao dịch; trường Đã trả mặc định 1 là chủ bill và chỉnh được khi tạo/sửa; đủ người thì tự hoàn tất; sửa bill/lần nhận giữ liên kết và tính lại tiến độ; Hoàn tất thủ công không sinh thu; xóa lần nhận cập nhật dòng thu và tiến độ | FR-15/US-24 |
+| AC-25 | Tiền thực nhận và cloud bill | Lần nhận 100,000 rồi 250,000 phải thể hiện thực nhận 350,000, không giả định chia đều; dữ liệu cùng chủ/tiền tệ, cloud hỗ trợ cả hai bảng và retry không trùng | FR-15, FR-20/US-24 |
 | AC-19 | Ghi chú | Nội dung, ghim, mốc nhắc nhở/liên kết lưu và đọc lại đúng | FR-16/US-20 |
 | AC-20 | Calendar | Tháng sáu tuần không mất ngày cuối; ngày được chọn/sự kiện lặp/cả ngày/nhiều ngày hiển thị đúng | FR-17/US-21 |
 | AC-21 | Widget | Biến động 2×2 và Lịch 4×2 hiện được trên One UI; mở đúng tab/ngày; không quyền/rỗng không crash | FR-18/US-22 |
@@ -51,3 +54,15 @@ Test nghiệp vụ/widget, analyze, build APK và nghiệm thu A54 là các lớ
 ## Quy đổi giao dịch ngân hàng USD
 
 Khi phân loại thông báo USD, giữ nguyên số tiền nguồn và ghi sổ VND theo tỷ giá cố định 1 USD = 27,000 VND. Lưu số gốc (cent USD), loại tiền nguồn và tỷ giá trong provenance `bank_source`; số tiền giao dịch dùng VND và tham gia tổng/biểu đồ VND đúng một lần. Tài khoản ghi sổ phải là VND. Form hiển thị số USD gốc và số VND quy đổi; chi tiết giao dịch giữ thông tin nguồn. Ví dụ 22.22 USD = 599,940 VND; 0.01 USD = 270 VND. Không đổi các giao dịch đã xác nhận trước đây; retry không tạo trùng.
+
+## Share Bill gọn và thống kê chi cá nhân
+
+- Bật Nhận Share Bill ở Thu nhập/phân loại ngân hàng: không còn Danh mục, Tags, ô tạo tag; chọn bill/số người ở gần đầu form. Tắt thì phân loại thường xuất hiện trở lại.
+- Bill 500,000 VND, 5 người, nhận lại 200,000 VND: tổng chi/biểu đồ ghi 300,000 VND; tổng thu không tăng bởi khoản nhận lại. Ledger vẫn giữ chi 500,000 và thu 200,000; số dư tài khoản giảm thực 300,000 VND. Sửa tổng người thành 4 không đổi số chi; sửa tiền nhận thành 250,000 VND thì chi còn 250,000 VND, không sửa số tiền chi gốc. Xóa lần nhận sẽ tăng lại số chi tương ứng. Nhận khác tháng vẫn cập nhật chi của bill; nhận vượt giữ số âm.
+
+## Debug bộ đọc ngân hàng
+
+- Nút Debug hiển thị trong Cài đặt Ngân hàng trên bản sử dụng bình thường, không chỉ bản phát triển.
+- Không quyền, không capture hoặc đổi owner: không thực hiện khôi phục/không tự bật quyền; không báo kết nối thành công.
+- Request rebind không có callback: đến hạn phải báo chưa khôi phục được. Callback thật: mới báo đã khôi phục. Dữ liệu tài chính và draft chờ không bị thay đổi.
+- Reset riêng component phải khôi phục trạng thái cũ; nếu tiến trình chết giữa các bước, mở lại app phục hồi component từ marker bền vững. Marker này không bị xóa cùng phiên/owner.

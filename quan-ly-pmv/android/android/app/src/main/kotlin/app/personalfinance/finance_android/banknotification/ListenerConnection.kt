@@ -26,6 +26,8 @@ object ListenerConnection {
         BankInbox.notifyStatus()
     }
     @Synchronized fun ensureBound(context: Context, force: Boolean = false) {
+        if (ListenerRecovery.running) return
+        ListenerRecovery.restoreComponent(context)
         val prefs = BankInbox.preferences(context)
         if (connected || BankInbox.owner(context) == null || !prefs.getBoolean("capture", false) || !hasAccess(context)) return
         val now = SystemClock.elapsedRealtime()

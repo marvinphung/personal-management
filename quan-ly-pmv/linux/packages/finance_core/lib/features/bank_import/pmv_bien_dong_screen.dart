@@ -1,3 +1,4 @@
+import '../share_bill/share_bill_controls.dart';
 import '../catalog/person_picker.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -492,6 +493,9 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
   String? personId;
   String? debtId;
   bool busy = false;
+  bool shareBillEnabled = false;
+  String? shareBillId;
+  int shareBillPeople = 1;
   String? error;
 
   @override
@@ -553,6 +557,16 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
       if (_isCongNo(allCategories) &&
           !_actionTagsForCongNo().contains(actionTag)) {
         throw const FormatException('Vui lòng chọn một hành động công nợ.');
+      }
+      if (shareBillEnabled && shareBillId == null) {
+        throw const FormatException('Vui lòng chọn Share Bill chưa hoàn tất.');
+      }
+      final selected = allCategories.where((c) => c.id == category).firstOrNull;
+      if (shareBillEnabled &&
+          !(selected?.text('name').toLowerCase().contains('nhận share') ==
+                  true ||
+              selected?.text('behavior') == 'share_bill_income')) {
+        throw const FormatException('Vui lòng chọn danh mục Nhận share bill.');
       }
       // Build transaction
       final transaction = widget.draft.toTransaction(
@@ -628,6 +642,8 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
           chosen,
           borrower: borrower,
           linkedDebt: linkedDebt,
+          shareBillId: shareBillEnabled ? shareBillId : null,
+          shareBillPeople: shareBillPeople,
           disbursementDirection: actionTag == 'Cho vay'
               ? DebtDirection.lent
               : actionTag == 'Vay nợ'
@@ -705,6 +721,22 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
           ).where((t) => t.text('category_id') == category).toList();
 
     final isCongNo = _isCongNo(allCategories);
+    final shareBills =
+        (ref.watch(recordsProvider(Entity.shareBills)).value ?? [])
+            .where(
+              (b) =>
+                  !b.deleted &&
+                  b.text('status') == 'active' &&
+                  b.text('currency') == widget.draft.classificationCurrency,
+            )
+            .toList();
+    final shareCategory = directionCategories
+        .where(
+          (c) =>
+              c.text('name').toLowerCase().contains('nhận share') ||
+              c.text('behavior') == 'share_bill_income',
+        )
+        .firstOrNull;
 
     // Active debts of correct direction for Công nợ pickers
     final activeDebts = debts
@@ -829,57 +861,81 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                   optional: false,
                   onChanged: (id) => setState(() => selectedAccountId = id),
                 ),
-              Text('Danh mục', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
+              if (direction == 'income')
+                ShareBillControls(
+                  income: true,
+                  enabled: shareBillEnabled,
+                  people: shareBillPeople,
+                  bills: shareBills,
+                  billId: shareBillId,
+                  onEnabled: (v) => setState(() {
+                    shareBillEnabled = v;
+                    shareBillId = null;
+                    shareBillPeople = 1;
+                    if (v && shareCategory != null) {
+                      category = shareCategory.id;
+                      selectedTags.clear();
+                      newTagController.clear();
+                      actionTag = null;
+                    }
+                  }),
+                  onPeople: (v) => setState(() => shareBillPeople = v),
+                  onBill: (v) => setState(() => shareBillId = v),
+                ),
 
-              // Top-5 category quick picks
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final cat in topCategories)
-                    ChoiceChip(
-                      label: Text(cat.text('name')),
-                      selected: category == cat.id,
-                      onSelected: (_) => setState(() {
-                        category = cat.id;
-                        selectedTags.clear();
-                        actionTag = null;
-                        personId = null;
-                        debtId = null;
-                      }),
-                    ),
-                  // "Khác" button opens full category picker
-                  ActionChip(
-                    avatar: const Icon(Icons.more_horiz, size: 16),
-                    label: const Text('Khác'),
-                    onPressed: () async {
-                      final picked = await _pickCategory(
-                        context,
-                        directionCategories,
-                      );
-                      if (picked != null && mounted) {
-                        setState(() {
-                          category = picked;
+              if (!shareBillEnabled) ...[
+                Text('Danh mục', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+
+                // Top-5 category quick picks
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final cat in topCategories)
+                      ChoiceChip(
+                        label: Text(cat.text('name')),
+                        selected: category == cat.id,
+                        onSelected: (_) => setState(() {
+                          category = cat.id;
                           selectedTags.clear();
                           actionTag = null;
                           personId = null;
                           debtId = null;
-                        });
-                      }
-                    },
+                        }),
+                      ),
+                    // "Khác" button opens full category picker
+                    ActionChip(
+                      avatar: const Icon(Icons.more_horiz, size: 16),
+                      label: const Text('Khác'),
+                      onPressed: () async {
+                        final picked = await _pickCategory(
+                          context,
+                          directionCategories,
+                        );
+                        if (picked != null && mounted) {
+                          setState(() {
+                            category = picked;
+                            selectedTags.clear();
+                            actionTag = null;
+                            personId = null;
+                            debtId = null;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+
+                // Show selected category name if picked via "Khác"
+                if (category != null &&
+                    !topCategories.any((c) => c.id == category)) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Đã chọn: ${directionCategories.where((c) => c.id == category).firstOrNull?.text('name') ?? ''}',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
-              ),
-
-              // Show selected category name if picked via "Khác"
-              if (category != null &&
-                  !topCategories.any((c) => c.id == category)) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Đã chọn: ${directionCategories.where((c) => c.id == category).firstOrNull?.text('name') ?? ''}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
               ],
 
               // Công nợ action tag selector
@@ -951,7 +1007,7 @@ class _PmvClassifyFormState extends ConsumerState<PmvClassifyForm> {
                 ),
 
               // Tag chips (non-Công nợ multi-select, Công nợ handled above)
-              if (category != null && !isCongNo) ...[
+              if (category != null && !isCongNo && !shareBillEnabled) ...[
                 const SizedBox(height: 16),
                 Text('Tags', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 8),

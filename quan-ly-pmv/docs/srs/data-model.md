@@ -56,7 +56,8 @@ Khi phân loại thông báo USD, giữ nguyên số tiền nguồn và ghi sổ
 
 ## Share Bill có theo dõi
 
-- `share_bills`: bill gắn với một giao dịch Chi tiêu (`expense_tx_id`), tổng tiền, tiền tệ, số người sẽ trả lại, số lượt đã nhận, trạng thái `active`/`completed`, ghi chú và thời điểm hoàn tất.
-- `share_bill_payments`: mỗi lần nhận tiền gắn với một bill và một giao dịch Thu nhập (`income_tx_id`), số tiền, ngày nhận và ghi chú.
+- `share_bills`: bill gắn với một giao dịch Chi tiêu (`expense_tx_id`), tổng tiền, tiền tệ, số người sẽ trả lại, số người đã được trả phần tiền, trạng thái `active`/`completed`, ghi chú và thời điểm hoàn tất.
+- Tiến độ `num_paid/num_people` bằng `initial_paid_people` (mặc định 1, gồm chủ bill) cộng số người của các lần nhận chưa xóa, so với tổng số người gồm chủ bill; không có liên kết định danh người trả trong mô hình hiện tại. Bill hoàn tất tự động khi đạt số người hoặc thủ công qua Hoàn tất (`manual_completed_at` phân biệt trạng thái thủ công); sổ giữ số tiền thực tế; báo cáo tính chi cá nhân bằng chi gốc trừ tổng payment.amount chưa xóa của đúng bill và loại khoản nhận lại khỏi tổng thu.
+- `share_bill_payments`: mỗi lần nhận tiền gắn với một bill và một giao dịch Thu nhập (`income_tx_id`), số tiền, ngày nhận, số người được trả hộ (`people_count`, mặc định 1) và ghi chú.
 - Hai thực thể có cùng metadata chủ sở hữu, ID ổn định, tombstone và cơ chế đồng bộ/outbox như các thực thể tài chính khác. Cloud phải hỗ trợ đọc và ghi cả hai trước khi triển khai bản app sử dụng chúng.
 - Liên kết bill/giao dịch và payment/bill/giao dịch chỉ được trỏ tới dữ liệu cùng chủ sở hữu. Client không ghi trực tiếp vào bảng; thao tác ghi đi qua RPC đồng bộ có kiểm tra owner, conflict và retry idempotent.

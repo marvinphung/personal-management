@@ -1,6 +1,6 @@
 # Tài liệu đặc tả Quản lý PMV
 
-Bộ SRS hiện hành của app cá nhân **Quản lý PMV**, dùng trên Samsung Galaxy A54. Cập nhật theo yêu cầu đã chốt đến ngày 05/11/2026. Các file dưới đây mô tả sản phẩm cần làm và tiêu chí chấp nhận; không phải kế hoạch triển khai hoặc báo cáo chạy test.
+Bộ SRS hiện hành của app cá nhân **Quản lý PMV**, dùng trên Samsung Galaxy A54. Bao gồm Share Bill có theo dõi được bổ sung ngày 06/11/2026; rà soát đặc tả ngày 09/11/2026. Các file dưới đây mô tả sản phẩm cần làm và tiêu chí chấp nhận; không phải kế hoạch triển khai hoặc báo cáo chạy test.
 
 | Tài liệu | Nội dung |
 |---|---|
